@@ -1,0 +1,21 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../entities/profile.dart';
+
+abstract class AuthRepository {
+  Stream<AuthState> get authStateChanges;
+  User? get currentUser;
+
+  Future<void> signIn({required String email, required String password});
+  Future<void> signUp({
+    required String email,
+    required String password,
+    required String fullName,
+    required String phone,
+  });
+  Future<void> signOut();
+
+  Future<UserProfile> getProfile(String userId);
+  Future<bool> isAdmin(String userId);
+  Stream<UserProfile> watchProfile(String userId);
+}
