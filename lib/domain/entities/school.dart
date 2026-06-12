@@ -11,6 +11,7 @@ class School extends Equatable {
     this.logoUrl,
     required this.priceFrom,
     this.rating,
+    this.reviewCount,
     required this.instructorsCount,
     required this.vehicleCategories,
   });
@@ -24,6 +25,7 @@ class School extends Equatable {
   final String? logoUrl;
   final int priceFrom;
   final double? rating;
+  final int? reviewCount;
   final int instructorsCount;
   final List<String> vehicleCategories;
 

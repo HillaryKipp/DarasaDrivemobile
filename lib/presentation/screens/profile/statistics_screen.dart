@@ -15,7 +15,25 @@ class StatisticsScreen extends ConsumerWidget {
     final attemptsAsync = ref.watch(testAttemptsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Test statistics')),
+      backgroundColor: const Color(0xFFF8FAF9),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.chevron_left, color: Colors.black, size: 28),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text(
+          'STATISTICS',
+          style: TextStyle(
+            color: Color(0xFF065F2F),
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+            letterSpacing: 1.1,
+          ),
+        ),
+        centerTitle: true,
+      ),
       body: attemptsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
@@ -23,74 +41,184 @@ class StatisticsScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(testAttemptsProvider),
         ),
         data: (attempts) {
-          if (attempts.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No test attempts yet. Complete a unit test to see your progress.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
-
+          // Calculate stats
           final avgPct = attempts.isEmpty
               ? 0
               : (attempts.map((a) => a.percentage).reduce((a, b) => a + b) /
                       attempts.length)
                   .round();
+          
+          final unitsCompleted = attempts.length; // Simplified for mock
+          final totalQuestions = attempts.isEmpty ? 0 : attempts.map((a) => a.total).reduce((a, b) => a + b);
+          final correctAnswers = attempts.isEmpty ? 0 : attempts.map((a) => a.score).reduce((a, b) => a + b);
 
           return ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _Stat(label: 'Attempts', value: '${attempts.length}'),
-                      _Stat(label: 'Avg score', value: '$avgPct%'),
-                    ],
-                  ),
+              // Overall Performance Section
+              const _SectionHeader(title: 'Overall Performance'),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
-              ),
-              const SizedBox(height: 16),
-              for (final attempt in attempts)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    title: Text(
-                      attempt.unitTitle ??
-                          'Unit ${attempt.unitNumber ?? ''}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      DateFormat.yMMMd().add_jm().format(attempt.completedAt),
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                child: Row(
+                  children: [
+                    Stack(
+                      alignment: Alignment.center,
                       children: [
-                        Text(
-                          '${attempt.score}/${attempt.total}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
+                        SizedBox(
+                          height: 100,
+                          width: 100,
+                          child: CircularProgressIndicator(
+                            value: avgPct / 100,
+                            strokeWidth: 10,
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF065F2F)),
                           ),
                         ),
                         Text(
-                          '${attempt.percentage}%',
+                          '$avgPct%',
                           style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
                           ),
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _StatRow(label: 'Units Completed', value: '$unitsCompleted / 19'),
+                          const Divider(height: 16),
+                          _StatRow(label: 'Questions Attempted', value: '$totalQuestions'),
+                          const Divider(height: 16),
+                          _StatRow(label: 'Correct Answers', value: '$correctAnswers'),
+                          const Divider(height: 16),
+                          _StatRow(label: 'Average Score', value: '$avgPct%'),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+              const SizedBox(height: 24),
+
+              // Performance by Unit Section
+              const _SectionHeader(title: 'Performance by Unit'),
+              Container(
+                height: 220,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF065F2F),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text('Score (%)', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: List.generate(10, (index) {
+                          // Mock bar heights
+                          final scores = [94, 88, 82, 65, 65, 68, 65, 65, 65, 62];
+                          final score = scores[index];
+                          final isHigh = score > 70;
+                          
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Container(
+                                width: 18,
+                                height: (score / 100) * 120,
+                                decoration: BoxDecoration(
+                                  color: isHigh ? const Color(0xFF065F2F) : const Color(0xFFE2E8F0),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text('${index + 1}', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                            ],
+                          );
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Recent Mock Tests Section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const _SectionHeader(title: 'Recent Mock Tests'),
+                  TextButton(
+                    onPressed: () {},
+                    child: const Text('View All', style: TextStyle(color: Color(0xFF065F2F), fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: attempts.take(3).map((attempt) {
+                    final isLast = attempts.indexOf(attempt) == 2 || attempts.indexOf(attempt) == attempts.length - 1;
+                    return Column(
+                      children: [
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          title: Text(
+                            attempt.unitTitle ?? 'Mock Test - Unit ${attempt.unitNumber}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                          ),
+                          subtitle: Text(
+                            DateFormat('MMMM d, y').format(attempt.completedAt),
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                          ),
+                          trailing: Text(
+                            '${attempt.percentage}%',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: attempt.percentage >= 70 
+                                  ? const Color(0xFF059669) 
+                                  : (attempt.percentage >= 50 ? Colors.orange : Colors.red),
+                            ),
+                          ),
+                        ),
+                        if (!isLast) const Divider(height: 1, indent: 20, endIndent: 20),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 30),
             ],
           );
         },
@@ -99,25 +227,38 @@ class StatisticsScreen extends ConsumerWidget {
   }
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title});
+  final String title;
 
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF1E293B),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  const _StatRow({required this.label, required this.value});
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: AppColors.primary,
-          ),
-        ),
-        Text(label, style: const TextStyle(color: AppColors.textMuted)),
+        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
       ],
     );
   }

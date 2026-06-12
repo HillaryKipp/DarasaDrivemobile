@@ -48,6 +48,7 @@ School schoolFromJson(Map<String, dynamic> json) => School(
       logoUrl: json['logo_url'] as String?,
       priceFrom: (json['price_from'] as num?)?.toInt() ?? 0,
       rating: (json['rating'] as num?)?.toDouble(),
+      reviewCount: (json['review_count'] as num?)?.toInt(),
       instructorsCount: (json['instructors_count'] as num?)?.toInt() ?? 0,
       vehicleCategories: (json['vehicle_categories'] as List<dynamic>?)
               ?.map((e) => e.toString())

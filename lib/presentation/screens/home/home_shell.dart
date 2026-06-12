@@ -35,15 +35,12 @@ class HomeShell extends StatelessWidget {
             label: 'Book',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Stats',
           ),
         ],
       ),
-      floatingActionButton: navigationShell.currentIndex == 0
-          ? null
-          : null,
     );
   }
 }

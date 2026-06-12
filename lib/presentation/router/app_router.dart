@@ -9,7 +9,6 @@ import '../screens/booking/schools_screen.dart';
 import '../screens/home/home_shell.dart';
 import '../screens/home/home_tab.dart';
 import '../screens/materials/materials_screen.dart';
-import '../screens/profile/profile_screen.dart';
 import '../screens/profile/statistics_screen.dart';
 import '../screens/tests/test_runner_screen.dart';
 import '../screens/tests/units_screen.dart';
@@ -105,14 +104,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/profile',
-                builder: (context, state) => const ProfileScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'statistics',
-                    builder: (context, state) => const StatisticsScreen(),
-                  ),
-                ],
+                path: '/stats',
+                builder: (context, state) => const StatisticsScreen(),
               ),
             ],
           ),
@@ -123,7 +116,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 });
 
 bool _requiresAuth(String location) {
-  return location.startsWith('/profile') ||
+  return location.startsWith('/stats') ||
       location.startsWith('/booking/') ||
       location.contains('/booking/');
 }
