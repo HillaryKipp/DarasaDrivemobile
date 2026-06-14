@@ -1,5 +1,7 @@
+import '../../domain/entities/admin_user.dart';
 import '../../domain/entities/booking.dart';
 import '../../domain/entities/material_item.dart';
+import '../../domain/entities/payment_record.dart';
 import '../../domain/entities/profile.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/entities/school.dart';
@@ -99,3 +101,28 @@ TestAttempt testAttemptFromJson(Map<String, dynamic> json) {
     completedAt: DateTime.parse(json['completed_at'] as String),
   );
 }
+
+PaymentRecord paymentFromJson(Map<String, dynamic> json) => PaymentRecord(
+      id: json['id'] as String,
+      userId: json['user_id'] as String?,
+      email: json['email'] as String?,
+      phone: json['phone'] as String?,
+      amount: (json['amount'] as num?)?.toInt() ?? 0,
+      status: json['status'] as String? ?? 'pending',
+      purpose: json['purpose'] as String?,
+      mpesaReceipt: json['mpesa_receipt'] as String? ??
+          json['mpesa_receipt_number'] as String? ??
+          json['receipt_number'] as String?,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
+    );
+
+AdminUser adminUserFromJson(
+  Map<String, dynamic> profileJson,
+  bool isAdmin,
+) =>
+    AdminUser(
+      profile: profileFromJson(profileJson),
+      isAdmin: isAdmin,
+    );

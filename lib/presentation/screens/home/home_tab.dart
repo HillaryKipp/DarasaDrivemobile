@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_providers.dart';
+import '../../widgets/profile_menu_button.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
@@ -26,14 +27,11 @@ class HomeTab extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Image.asset(
-                      'assets/images/ntsalogo.png',
+                      'assets/images/darasadrive_logo.png',
                       height: 44,
                       errorBuilder: (context, error, stackTrace) => const Icon(Icons.directions_car, color: AppColors.primary),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.notifications_none_outlined, size: 28),
-                      onPressed: () {},
-                    ),
+                    const ProfileMenuButton(),
                   ],
                 ),
               ),
@@ -282,12 +280,24 @@ class HomeTab extends ConsumerWidget {
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton(
-                            onPressed: () => context.push('/unlock'),
+                            onPressed: () {
+                              final user = ref.read(currentUserProvider);
+                              if (user == null) {
+                                context.push('/auth?tab=signup');
+                              } else {
+                                context.push('/unlock');
+                              }
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               elevation: 0,
                             ),
-                            child: const Text('Unlock with M-Pesa'),
+                            child: const Text('Unlock Full Access'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () => context.push('/auth'),
+                            child: const Text('Already have an account? Sign in'),
                           ),
                         ],
                       ),

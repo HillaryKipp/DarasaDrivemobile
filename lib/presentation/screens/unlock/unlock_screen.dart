@@ -7,7 +7,10 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/repository_providers.dart';
+import '../auth/auth_screen.dart';
 
+/// Payment screen shown after sign-in when the user has not paid yet.
+/// Guests are directed to register first via the auth screen.
 class UnlockScreen extends ConsumerStatefulWidget {
   const UnlockScreen({super.key});
 
@@ -31,12 +34,20 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = ref.read(currentUserProvider);
-      if (user?.email != null) {
-        _emailController.text = user!.email!;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prefillFromUser());
+  }
+
+  void _prefillFromUser() {
+    final user = ref.read(currentUserProvider);
+    if (user?.email != null) {
+      _emailController.text = user!.email!;
+    }
+    ref.read(userProfileProvider.future).then((profile) {
+      if (!mounted) return;
+      if (profile?.phone != null && profile!.phone!.isNotEmpty) {
+        _phoneController.text = profile.phone!;
       }
-    });
+    }).catchError((_) {});
   }
 
   @override
@@ -46,17 +57,52 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     super.dispose();
   }
 
+  void _goToSignUp() {
+    context.go(
+      '/auth',
+      extra: AuthScreenArgs(initialTab: 1),
+    );
+  }
+
+  void _goToSignIn() {
+    context.go(
+      '/auth',
+      extra: AuthScreenArgs(
+        prefillEmail: _emailController.text.trim(),
+        initialTab: 0,
+      ),
+    );
+  }
+
   Future<void> _pay() async {
+    final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
+    final user = ref.read(currentUserProvider);
+
+    if (user == null) {
+      _goToSignUp();
+      return;
+    }
+
+    if (email.isEmpty || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email and M-Pesa phone number.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     try {
-      final user = ref.read(currentUserProvider);
       await ref.read(paymentRepositoryProvider).initiateStkPush(
-            email: _emailController.text.trim(),
-            phone: _phoneController.text.trim(),
-            amount: AppConfig.unlockAmountKes,
-            purpose: AppConfig.unlockPurpose,
-            userId: user?.id,
-          );
+        email: email,
+        phone: phone,
+        amount: AppConfig.unlockAmountKes,
+        purpose: AppConfig.unlockPurpose,
+        userId: user.id,
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -65,30 +111,29 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
         ),
       );
 
-      if (user != null) {
-        setState(() {
-          _loading = false;
-          _waiting = true;
-        });
-        final unlocked = await ref
-            .read(paymentRepositoryProvider)
-            .waitForUnlock(user.id);
-        if (!mounted) return;
-        if (unlocked) {
-          ref.invalidate(userProfileProvider);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Full access unlocked!')),
-          );
-          context.go('/home');
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Payment not confirmed yet. Check your M-Pesa.'),
-            ),
-          );
-        }
+      setState(() {
+        _loading = false;
+        _waiting = true;
+      });
+
+      final unlocked = await ref
+          .read(paymentRepositoryProvider)
+          .waitForUnlock(user.id);
+
+      if (!mounted) return;
+
+      if (unlocked) {
+        ref.invalidate(userProfileProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Full access unlocked!')),
+        );
+        context.go('/home');
       } else {
-        context.go('/auth');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment not confirmed yet. Check your M-Pesa, then try again.'),
+          ),
+        );
       }
     } catch (e) {
       final message = e is AppException ? e.message : e.toString();
@@ -109,6 +154,10 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
+    final isLoggedIn = user != null;
+    final busy = _loading || _waiting;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Unlock Full Access')),
       body: SingleChildScrollView(
@@ -125,25 +174,28 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                     colors: [AppColors.primary, AppColors.primaryDark],
                   ),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
                     Text(
-                      'Unlock Full Access',
-                      style: TextStyle(
+                      isLoggedIn ? 'Complete your payment' : 'Create account & unlock',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
-                      'One-time payment via M-Pesa',
-                      style: TextStyle(color: Colors.white70),
+                      isLoggedIn
+                          ? 'Pay via M-Pesa to unlock full access (test pricing).'
+                          : 'Register first, verify your email, then sign in to pay.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white70, fontSize: 13),
                     ),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
                     Text(
                       'KSh ${AppConfig.unlockAmountKes}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
@@ -170,38 +222,101 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                         ),
                       ),
                     const Divider(height: 32),
-                    TextField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(labelText: 'Email'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'M-Pesa phone',
-                        hintText: '2547XXXXXXXX',
+                    if (!isLoggedIn) ...[
+                      const Text(
+                        'Step 1: Create your account',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: (_loading || _waiting) ? null : _pay,
-                      icon: const Icon(Icons.phone_android),
-                      label: Text(
-                        _waiting
-                            ? 'Waiting for payment…'
-                            : _loading
-                                ? 'Sending STK push…'
-                                : 'Pay KSh ${AppConfig.unlockAmountKes}',
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Register with your details. We will send a confirmation link to your email. '
+                        'After verifying, sign in and complete M-Pesa payment to unlock the app.',
+                        style: TextStyle(color: AppColors.textMuted, height: 1.4),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "You'll receive an M-Pesa prompt on your phone.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                    ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: busy ? null : _goToSignUp,
+                        child: const Text('Create account'),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Already have an account?',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Sign in after verifying your email. You will be prompted to pay if you have not unlocked yet.',
+                              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                onPressed: busy ? null : _goToSignIn,
+                                child: const Text('Sign in'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      const Text(
+                        'Step 2: Pay with M-Pesa',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Authorize the payment on your phone to unlock all content.',
+                        style: TextStyle(color: AppColors.textMuted),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        enabled: !busy,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          prefixIcon: Icon(Icons.email_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        enabled: !busy,
+                        decoration: const InputDecoration(
+                          labelText: 'M-Pesa phone',
+                          hintText: '2547XXXXXXXX',
+                          prefixIcon: Icon(Icons.phone_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: busy ? null : _pay,
+                        icon: const Icon(Icons.phone_android),
+                        label: Text(
+                          _waiting
+                              ? 'Waiting for payment…'
+                              : _loading
+                              ? 'Sending STK push…'
+                              : 'Pay KSh ${AppConfig.unlockAmountKes}',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        "You'll receive an M-Pesa prompt on your phone to authorize the payment.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                    ],
                   ],
                 ),
               ),

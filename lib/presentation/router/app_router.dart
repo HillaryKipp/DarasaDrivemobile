@@ -2,13 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../domain/entities/material_item.dart';
+import '../../domain/entities/question.dart';
+import '../../domain/entities/school.dart';
+import '../../domain/entities/unit.dart';
 import '../providers/auth_providers.dart';
+import '../screens/admin/admin_dashboard_screen.dart';
+import '../screens/admin/admin_materials_screen.dart';
+import '../screens/admin/admin_payments_screen.dart';
+import '../screens/admin/admin_questions_screen.dart';
+import '../screens/admin/admin_schools_screen.dart';
+import '../screens/admin/admin_units_screen.dart';
+import '../screens/admin/admin_users_screen.dart';
 import '../screens/auth/auth_screen.dart';
 import '../screens/booking/booking_flow_screen.dart';
 import '../screens/booking/schools_screen.dart';
 import '../screens/home/home_shell.dart';
 import '../screens/home/home_tab.dart';
 import '../screens/materials/materials_screen.dart';
+import '../screens/profile/profile_screen.dart';
 import '../screens/profile/statistics_screen.dart';
 import '../screens/tests/test_runner_screen.dart';
 import '../screens/tests/units_screen.dart';
@@ -19,6 +31,8 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
+  final isAdminAsync = ref.watch(isAdminProvider);
+  final hasPaid = ref.watch(hasPaidProvider);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -28,24 +42,129 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (isLoading) return null;
 
       final user = authState.valueOrNull?.session?.user;
-      final onAuth = state.matchedLocation == '/auth';
-      final onUnlock = state.matchedLocation == '/unlock';
+      final location = state.matchedLocation;
+      final onAuth = location == '/auth';
+      final onUnlock = location == '/unlock';
+      final onProfile = location == '/profile';
+      final onAdmin = location.startsWith('/admin');
 
-      if (user == null && _requiresAuth(state.matchedLocation)) {
+      if (onAdmin) {
+        if (user == null) return '/auth';
+        if (isAdminAsync.isLoading) return null;
+        if (isAdminAsync.valueOrNull != true) return '/home';
+      }
+
+      if (user == null && _requiresAuth(location)) {
         return '/auth';
       }
-      if (user != null && onAuth) return '/home';
-      if (onUnlock) return null;
+
+      // Signed-in but unpaid: prompt payment before using the app.
+      final isAdmin = isAdminAsync.valueOrNull ?? false;
+      if (user != null &&
+          !hasPaid &&
+          !isAdmin &&
+          !onUnlock &&
+          !onAuth &&
+          !onProfile &&
+          !onAdmin) {
+        return '/unlock';
+      }
+
+      if (user != null && onAuth) {
+        if (isAdmin || hasPaid) return '/home';
+        return '/unlock';
+      }
+      if (onUnlock || onAuth) return null;
       return null;
     },
     routes: [
       GoRoute(
         path: '/auth',
-        builder: (context, state) => const AuthScreen(),
+        builder: (context, state) {
+          final args = state.extra as AuthScreenArgs?;
+          final tab = state.uri.queryParameters['tab'];
+          return AuthScreen(
+            initialTab: args?.initialTab ?? (tab == 'signup' ? 1 : 0),
+            prefillEmail: args?.prefillEmail ?? state.uri.queryParameters['email'],
+            prefillPhone: args?.prefillPhone ?? state.uri.queryParameters['phone'],
+          );
+        },
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
         path: '/unlock',
         builder: (context, state) => const UnlockScreen(),
+      ),
+      GoRoute(
+        path: '/admin',
+        redirect: (context, state) =>
+            state.uri.path == '/admin' ? '/admin/dashboard' : null,
+        routes: [
+          GoRoute(
+            path: 'dashboard',
+            builder: (context, state) => const AdminDashboardScreen(),
+          ),
+          GoRoute(
+            path: 'units',
+            builder: (context, state) => const AdminUnitsScreen(),
+            routes: [
+              GoRoute(
+                path: 'form',
+                builder: (context, state) =>
+                    AdminUnitFormScreen(unit: state.extra as Unit?),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'questions',
+            builder: (context, state) => const AdminQuestionsScreen(),
+            routes: [
+              GoRoute(
+                path: 'form',
+                builder: (context, state) {
+                  final extra = state.extra as Map<String, dynamic>?;
+                  return AdminQuestionFormScreen(
+                    unitId: extra?['unitId'] as String? ?? '',
+                    question: extra?['question'] as Question?,
+                  );
+                },
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'materials',
+            builder: (context, state) => const AdminMaterialsScreen(),
+            routes: [
+              GoRoute(
+                path: 'form',
+                builder: (context, state) =>
+                    AdminMaterialFormScreen(material: state.extra as MaterialItem?),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'schools',
+            builder: (context, state) => const AdminSchoolsScreen(),
+            routes: [
+              GoRoute(
+                path: 'form',
+                builder: (context, state) =>
+                    AdminSchoolFormScreen(school: state.extra as School?),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'users',
+            builder: (context, state) => const AdminUsersScreen(),
+          ),
+          GoRoute(
+            path: 'payments',
+            builder: (context, state) => const AdminPaymentsScreen(),
+          ),
+        ],
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

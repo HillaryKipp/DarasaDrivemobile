@@ -24,6 +24,13 @@ class ProfileScreen extends ConsumerWidget {
 
     if (user == null) {
       return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
+          ),
+          title: const Text('Profile'),
+        ),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -48,6 +55,13 @@ class ProfileScreen extends ConsumerWidget {
     final hasPaid = ref.watch(hasPaidProvider);
 
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
+        ),
+        title: const Text('Profile'),
+      ),
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
