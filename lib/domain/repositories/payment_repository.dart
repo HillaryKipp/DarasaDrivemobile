@@ -1,3 +1,17 @@
+/// Result of polling after an STK push for account unlock.
+class UnlockWaitResult {
+  const UnlockWaitResult({
+    required this.confirmed,
+    this.paymentCompleted = false,
+  });
+
+  /// `profiles.has_paid` is true — user can access premium content.
+  final bool confirmed;
+
+  /// A completed `account_unlock` payment exists but profile may still be syncing.
+  final bool paymentCompleted;
+}
+
 abstract class PaymentRepository {
   Future<void> initiateStkPush({
     required String email,
@@ -8,7 +22,19 @@ abstract class PaymentRepository {
     String? bookingId,
   });
 
-  Future<bool> waitForUnlock(String userId, {int maxAttempts = 30});
+  Future<UnlockWaitResult> waitForUnlock(
+    String userId, {
+    String? email,
+    String? phone,
+    int maxAttempts = 30,
+  });
+
+  /// One-shot status check (no initial delay) — for manual "Check again".
+  Future<UnlockWaitResult> checkUnlockStatus({
+    required String userId,
+    String? email,
+    String? phone,
+  });
 
   /// Polls for payment confirmation by email/phone, for use when the
   /// user has no account yet (pre-signup unlock flow).
