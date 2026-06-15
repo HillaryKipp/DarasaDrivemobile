@@ -13,7 +13,8 @@ class UnlockWaitResult {
 }
 
 abstract class PaymentRepository {
-  Future<void> initiateStkPush({
+  /// Returns the `checkoutRequestId` from the STK push response, if available.
+  Future<String?> initiateStkPush({
     required String email,
     required String phone,
     required int amount,
@@ -23,17 +24,19 @@ abstract class PaymentRepository {
   });
 
   Future<UnlockWaitResult> waitForUnlock(
-    String userId, {
-    String? email,
-    String? phone,
-    int maxAttempts = 30,
-  });
+      String userId, {
+        String? email,
+        String? phone,
+        String? checkoutRequestId,
+        int maxAttempts = 30,
+      });
 
   /// One-shot status check (no initial delay) — for manual "Check again".
   Future<UnlockWaitResult> checkUnlockStatus({
     required String userId,
     String? email,
     String? phone,
+    String? checkoutRequestId,
   });
 
   /// Polls for payment confirmation by email/phone, for use when the

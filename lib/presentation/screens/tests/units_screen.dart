@@ -16,6 +16,7 @@ class UnitsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final unitsAsync = ref.watch(unitsProvider);
     final hasPaid = ref.watch(hasPaidProvider);
+    final attemptsAsync = ref.watch(testAttemptsProvider);
 
     return DefaultTabController(
       length: 2,
@@ -47,7 +48,7 @@ class UnitsScreen extends ConsumerWidget {
         ),
         body: Column(
           children: [
-            // Top Green Banner
+            // Top Course Progress Banner
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Container(
@@ -67,48 +68,74 @@ class UnitsScreen extends ConsumerWidget {
                       child: const Icon(Icons.description, color: Colors.white, size: 30),
                     ),
                     const SizedBox(width: 16),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '19 Units',
+                          const Text(
+                            'Course Progress',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Practice with over 950 questions',
-                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          const SizedBox(height: 4),
+                          unitsAsync.when(
+                            data: (units) => Text(
+                              '${units.length} Units • Over 950 questions',
+                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                            loading: () => const Text('Loading...', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            error: (_, __) => const SizedBox.shrink(),
                           ),
                         ],
                       ),
                     ),
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          height: 48,
-                          width: 48,
-                          child: CircularProgressIndicator(
-                            value: 0.16,
-                            strokeWidth: 4,
-                            backgroundColor: Colors.white.withValues(alpha: 0.1),
-                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        ),
-                        const Text(
-                          '16%',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                    // Overall dynamic progress calculation
+                    unitsAsync.when(
+                      data: (units) {
+                        if (units.isEmpty) return const SizedBox.shrink();
+                        final attempts = attemptsAsync.valueOrNull ?? [];
+                        
+                        final bestScores = <String, double>{};
+                        for (final a in attempts) {
+                          final p = a.total == 0 ? 0.0 : a.score / a.total;
+                          if (p > (bestScores[a.unitId] ?? 0.0)) {
+                            bestScores[a.unitId] = p;
+                          }
+                        }
+
+                        final sum = bestScores.values.fold(0.0, (a, b) => a + b);
+                        final overallProgress = sum / units.length;
+                        final overallPct = (overallProgress * 100).toInt();
+
+                        return Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              height: 48,
+                              width: 48,
+                              child: CircularProgressIndicator(
+                                value: overallProgress,
+                                strokeWidth: 4,
+                                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            ),
+                            Text(
+                              '$overallPct%',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                      loading: () => const SizedBox(width: 48, height: 48),
+                      error: (_, __) => const SizedBox.shrink(),
                     ),
                   ],
                 ),
@@ -138,41 +165,52 @@ class UnitsScreen extends ConsumerWidget {
                       message: e.toString(),
                       onRetry: () => ref.invalidate(unitsProvider),
                     ),
-                    data: (units) => ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: units.length + (hasPaid ? 0 : 1),
-                      separatorBuilder: (context, index) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        if (index == units.length && !hasPaid) {
-                          return _UnlockBanner(onTap: () => context.push('/unlock'));
+                    data: (units) {
+                      final attempts = attemptsAsync.valueOrNull ?? [];
+                      // Pre-calculate best scores for fast lookup
+                      final bestScores = <String, double>{};
+                      for (final a in attempts) {
+                        final p = a.total == 0 ? 0.0 : a.score / a.total;
+                        if (p > (bestScores[a.unitId] ?? 0.0)) {
+                          bestScores[a.unitId] = p;
                         }
-                        if (index >= units.length) return null;
+                      }
 
-                        final unit = units[index];
-                        // Mock progress for matching UI (Top items show some progress)
-                        double? progress;
-                        if (index == 0) progress = 1.0;
-                        else if (index == 1) progress = 0.8;
-                        else if (index == 2) progress = 0.6;
-                        else if (index == 3) progress = 0.4;
-                        else if (index == 4) progress = 0.2;
+                      return ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: units.length + (hasPaid ? 0 : 1),
+                        separatorBuilder: (context, index) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          if (index == units.length && !hasPaid) {
+                            return _UnlockBanner(
+                              onTap: () => context.push(
+                                '/unlock?from=${Uri.encodeComponent('/tests')}',
+                              ),
+                            );
+                          }
+                          if (index >= units.length) return null;
 
-                        return _UnitListItem(
-                          unit: unit,
-                          hasPaid: hasPaid,
-                          progress: progress,
-                          onTap: () {
-                            if (!unit.isAccessible(hasPaid)) {
-                              context.push('/unlock');
-                              return;
-                            }
-                            context.go('/tests/${unit.id}');
-                          },
-                        );
-                      },
-                    ),
+                          final unit = units[index];
+                          final progress = bestScores[unit.id];
+
+                          return _UnitListItem(
+                            unit: unit,
+                            hasPaid: hasPaid,
+                            progress: progress,
+                            onTap: () {
+                              final target = '/tests/${unit.id}';
+                              if (!unit.isAccessible(hasPaid)) {
+                                context.push('/unlock?from=${Uri.encodeComponent(target)}');
+                                return;
+                              }
+                              context.go(target);
+                            },
+                          );
+                        },
+                      );
+                    },
                   ),
-                  const Center(child: Text('Progress tracking coming soon')),
+                  const Center(child: Text('Performance analysis coming soon')),
                 ],
               ),
             ),
@@ -247,7 +285,7 @@ class _UnitListItem extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   const Text(
-                    '50 Questions',
+                    'Practice Quiz',
                     style: TextStyle(
                       color: Color(0xFF64748B),
                       fontSize: 11,
@@ -259,7 +297,7 @@ class _UnitListItem extends StatelessWidget {
             // Status Icon / Progress
             if (locked)
               const Icon(Icons.lock_outline, color: Color(0xFF94A3B8), size: 20)
-            else if (progress != null)
+            else if (progress != null && progress! > 0)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

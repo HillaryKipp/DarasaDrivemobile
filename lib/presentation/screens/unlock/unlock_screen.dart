@@ -14,7 +14,8 @@ import '../auth/auth_screen.dart';
 /// Payment screen shown after sign-in when the user has not paid yet.
 /// Guests are directed to register first via the auth screen.
 class UnlockScreen extends ConsumerStatefulWidget {
-  const UnlockScreen({super.key});
+  final String? from;
+  const UnlockScreen({super.key, this.from});
 
   @override
   ConsumerState<UnlockScreen> createState() => _UnlockScreenState();
@@ -27,6 +28,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   bool _waiting = false;
   String? _overlayMessage;
   String? _errorMessage;
+  String? _lastCheckoutRequestId;
 
   static const _perks = [
     'All 16 NTSA units + 950+ questions',
@@ -110,13 +112,18 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Full access unlocked!')),
         );
-        context.go('/home');
+        // Navigate back to the intended destination or home
+        if (widget.from != null && widget.from!.isNotEmpty) {
+          context.go(widget.from!);
+        } else {
+          context.go('/home');
+        }
         return;
       }
 
       setState(() {
         _errorMessage =
-            'Payment confirmed but your account is still updating. '
+        'Payment confirmed but your account is still updating. '
             'Tap "Check payment status" to try again.';
       });
       return;
@@ -125,7 +132,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     if (result.paymentCompleted) {
       setState(() {
         _errorMessage =
-            'Payment received! We are activating your account. '
+        'Payment received! We are activating your account. '
             'Tap "Check payment status" in a moment.';
       });
       return;
@@ -133,25 +140,31 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
 
     setState(() {
       _errorMessage =
-          'Payment not confirmed yet. Authorize the M-Pesa prompt on your phone, '
+      'Payment not confirmed yet. Authorize the M-Pesa prompt on your phone, '
           'then tap "Check payment status" or "Pay again" to retry.';
     });
   }
 
-  Future<void> _waitForPayment({required String userId, required String email, required String phone}) async {
+  Future<void> _waitForPayment({
+    required String userId,
+    required String email,
+    required String phone,
+    String? checkoutRequestId,
+  }) async {
     setState(() {
       _loading = false;
       _waiting = true;
       _overlayMessage =
-          'Waiting for payment confirmation…\n'
+      'Waiting for payment confirmation…\n'
           'Authorize the M-Pesa prompt on your phone.';
     });
 
     final result = await ref.read(paymentRepositoryProvider).waitForUnlock(
-          userId,
-          email: email,
-          phone: phone,
-        );
+      userId,
+      email: email,
+      phone: phone,
+      checkoutRequestId: checkoutRequestId,
+    );
 
     if (!mounted) return;
     await _handleUnlockResult(result);
@@ -185,10 +198,11 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
 
     try {
       final result = await ref.read(paymentRepositoryProvider).checkUnlockStatus(
-            userId: user.id,
-            email: email,
-            phone: phone,
-          );
+        userId: user.id,
+        email: email,
+        phone: phone,
+        checkoutRequestId: _lastCheckoutRequestId,
+      );
       if (!mounted) return;
       await _handleUnlockResult(result);
     } catch (e) {
@@ -235,13 +249,15 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     });
 
     try {
-      await ref.read(paymentRepositoryProvider).initiateStkPush(
-            email: email,
-            phone: phone,
-            amount: AppConfig.unlockAmountKes,
-            purpose: AppConfig.unlockPurpose,
-            userId: user.id,
-          );
+      final checkoutRequestId = await ref.read(paymentRepositoryProvider).initiateStkPush(
+        email: email,
+        phone: phone,
+        amount: AppConfig.unlockAmountKes,
+        purpose: AppConfig.unlockPurpose,
+        userId: user.id,
+      );
+
+      _lastCheckoutRequestId = checkoutRequestId;
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -250,7 +266,12 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
         ),
       );
 
-      await _waitForPayment(userId: user.id, email: email, phone: phone);
+      await _waitForPayment(
+        userId: user.id,
+        email: email,
+        phone: phone,
+        checkoutRequestId: checkoutRequestId,
+      );
     } catch (e) {
       final message = e is AppException ? e.message : e.toString();
       if (mounted) {
@@ -352,7 +373,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                           const SizedBox(height: 8),
                           const Text(
                             'Register with your details. We will send a confirmation link to your email. '
-                            'After verifying, sign in and complete M-Pesa payment to unlock the app.',
+                                'After verifying, sign in and complete M-Pesa payment to unlock the app.',
                             style: TextStyle(color: AppColors.textMuted, height: 1.4),
                           ),
                           const SizedBox(height: 16),

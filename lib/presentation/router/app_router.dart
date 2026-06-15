@@ -67,7 +67,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           !onAuth &&
           !onProfile &&
           !onAdmin) {
-        return '/unlock';
+        return '/unlock?from=${Uri.encodeComponent(state.uri.toString())}';
       }
 
       if (user != null && onAuth) {
@@ -96,7 +96,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/unlock',
-        builder: (context, state) => const UnlockScreen(),
+        builder: (context, state) {
+          final from = state.uri.queryParameters['from'];
+          return UnlockScreen(from: from);
+        },
       ),
       GoRoute(
         path: '/admin',

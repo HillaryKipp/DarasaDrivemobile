@@ -12,6 +12,7 @@ class Question extends Equatable {
     required this.optionD,
     required this.correctOption,
     this.explanation,
+    required this.createdAt,   // ← added
   });
 
   final String id;
@@ -24,13 +25,14 @@ class Question extends Equatable {
   final String optionD;
   final String correctOption;
   final String? explanation;
+  final DateTime createdAt;   // ← added
 
   Map<String, String> get options => {
-        'A': optionA,
-        'B': optionB,
-        'C': optionC,
-        'D': optionD,
-      };
+    'A': optionA,
+    'B': optionB,
+    'C': optionC,
+    'D': optionD,
+  };
 
   String optionLabel(String key) => options[key] ?? '';
 

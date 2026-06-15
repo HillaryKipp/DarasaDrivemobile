@@ -11,7 +11,7 @@ import '../../widgets/error_view.dart';
 import '../../widgets/loading_view.dart';
 
 final questionsProvider =
-    FutureProvider.family<List<Question>, String>((ref, unitId) {
+FutureProvider.family<List<Question>, String>((ref, unitId) {
   return ref.watch(unitsRepositoryProvider).getQuestions(unitId);
 });
 
@@ -58,9 +58,14 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                     const SizedBox(height: 8),
                     const Text('Unlock all units with a one-time payment.'),
                     const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: () => context.push('/unlock'),
-                      child: const Text('Unlock now'),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => context.push(
+                          '/unlock?from=${Uri.encodeComponent('/tests/${widget.unitId}')}',
+                        ),
+                        child: const Text('Unlock now'),
+                      ),
                     ),
                   ],
                 ),
@@ -82,7 +87,11 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
             ),
           ),
           data: (questions) {
-            if (questions.isEmpty) {
+            // Shuffle so order is random on every attempt
+            final shuffled = [...questions]
+              ..shuffle();
+
+            if (shuffled.isEmpty) {
               return Scaffold(
                 appBar: AppBar(title: Text(unit.title)),
                 body: Center(
@@ -104,7 +113,7 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
             if (_submitted) {
               return _ResultsView(
                 unitTitle: unit.title,
-                questions: questions,
+                questions: shuffled,
                 answers: _answers,
                 onRetry: () => setState(() {
                   _index = 0;
@@ -116,8 +125,8 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
               );
             }
 
-            final current = questions[_index];
-            final progress = ((_index + 1) / questions.length);
+            final current = shuffled[_index];
+            final progress = ((_index + 1) / shuffled.length);
 
             return Scaffold(
               appBar: AppBar(
@@ -128,13 +137,16 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                 ),
               ),
               body: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // ── Progress bar ────────────────────────────────────────
                   LinearProgressIndicator(
                     value: progress,
                     minHeight: 6,
                     backgroundColor: Colors.grey.shade200,
                     color: AppColors.primary,
                   ),
+                  // ── Scrollable question area ─────────────────────────────
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(20),
@@ -142,7 +154,7 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            'Question ${_index + 1} of ${questions.length}',
+                            'Question ${_index + 1} of ${shuffled.length}',
                             style: const TextStyle(color: AppColors.textMuted),
                           ),
                           const SizedBox(height: 12),
@@ -153,44 +165,103 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                          // ── Diagram / image (only when present) ───────────
+                          if (current.imageUrl != null &&
+                              current.imageUrl!.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                current.imageUrl!,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (context, child, progress) {
+                                  if (progress == null) return child;
+                                  return Container(
+                                    height: 180,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Center(
+                                      child: CircularProgressIndicator(
+                                        value: progress.expectedTotalBytes != null
+                                            ? progress.cumulativeBytesLoaded /
+                                            progress.expectedTotalBytes!
+                                            : null,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (context, error, stack) =>
+                                    Container(
+                                      height: 120,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Center(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.broken_image_outlined,
+                                                size: 36, color: Colors.grey),
+                                            SizedBox(height: 6),
+                                            Text(
+                                              'Image could not be loaded',
+                                              style: TextStyle(color: Colors.grey),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 20),
+                          // ── Answer options ──────────────────────────────
                           for (final entry in current.options.entries)
                             _OptionTile(
                               label: entry.key,
                               text: entry.value,
                               selected: _answers[current.id] == entry.key,
                               onTap: () => setState(
-                                () => _answers[current.id] = entry.key,
+                                    () => _answers[current.id] = entry.key,
                               ),
                             ),
                         ],
                       ),
                     ),
                   ),
+                  // ── Navigation bar ──────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
                         if (_index > 0)
-                          OutlinedButton(
-                            onPressed: () => setState(() => _index--),
-                            child: const Text('Back'),
+                          SizedBox(
+                            width: 100,
+                            child: OutlinedButton(
+                              onPressed: () => setState(() => _index--),
+                              child: const Text('Back'),
+                            ),
                           ),
                         const Spacer(),
-                        ElevatedButton(
-                          onPressed: _answers[current.id] == null
-                              ? null
-                              : () {
-                                  if (_index < questions.length - 1) {
-                                    setState(() => _index++);
-                                  } else {
-                                    _submit(questions);
-                                  }
-                                },
-                          child: Text(
-                            _index < questions.length - 1
-                                ? 'Next'
-                                : 'Submit',
+                        SizedBox(
+                          width: 120,
+                          child: ElevatedButton(
+                            onPressed: _answers[current.id] == null
+                                ? null
+                                : () {
+                              if (_index < shuffled.length - 1) {
+                                setState(() => _index++);
+                              } else {
+                                _submit(shuffled);
+                              }
+                            },
+                            child: Text(
+                              _index < shuffled.length - 1 ? 'Next' : 'Submit',
+                            ),
                           ),
                         ),
                       ],
@@ -221,16 +292,20 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
     final user = ref.read(currentUserProvider);
     if (user != null) {
       await ref.read(unitsRepositoryProvider).saveTestAttempt(
-            userId: user.id,
-            unitId: widget.unitId,
-            score: score,
-            total: questions.length,
-            wrongQuestionIds: wrongIds,
-          );
+        userId: user.id,
+        unitId: widget.unitId,
+        score: score,
+        total: questions.length,
+        wrongQuestionIds: wrongIds,
+      );
       ref.invalidate(testAttemptsProvider);
     }
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Option tile
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _OptionTile extends StatelessWidget {
   const _OptionTile({
@@ -253,7 +328,7 @@ class _OptionTile extends StatelessWidget {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor:
-              selected ? AppColors.primary : Colors.grey.shade200,
+          selected ? AppColors.primary : Colors.grey.shade200,
           foregroundColor: selected ? Colors.white : Colors.black87,
           child: Text(label),
         ),
@@ -263,6 +338,10 @@ class _OptionTile extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Results view
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _ResultsView extends StatelessWidget {
   const _ResultsView({
@@ -298,6 +377,7 @@ class _ResultsView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          // ── Score card ─────────────────────────────────────────────────
           Card(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -318,7 +398,7 @@ class _ResultsView extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '$pct% — ${passed ? "Great work, you passed!" : "Keep practising — you'll get there."}',
+                    '$pct% — ${passed ? "Great work, you passed!" : "Keep practising — you\'ll get there."}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textMuted),
                   ),
@@ -344,6 +424,7 @@ class _ResultsView extends StatelessWidget {
               ),
             ),
           ),
+          // ── Wrong answers review ────────────────────────────────────────
           if (wrong.isNotEmpty) ...[
             const SizedBox(height: 24),
             const Text(
@@ -359,15 +440,34 @@ class _ResultsView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(q.questionText, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        q.questionText,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      // Show image in review if the question had one
+                      if (q.imageUrl != null && q.imageUrl!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            q.imageUrl!,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       Text(
                         'Correct: ${q.correctOption} — ${q.optionLabel(q.correctOption)}',
                         style: const TextStyle(color: AppColors.primary),
                       ),
-                      if (q.explanation != null) ...[
+                      if (q.explanation != null &&
+                          q.explanation!.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Text(q.explanation!, style: const TextStyle(color: AppColors.textMuted)),
+                        Text(
+                          q.explanation!,
+                          style: const TextStyle(color: AppColors.textMuted),
+                        ),
                       ],
                     ],
                   ),

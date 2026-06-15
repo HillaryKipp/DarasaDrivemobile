@@ -19,7 +19,7 @@ class MaterialsScreen extends ConsumerWidget {
     final hasPaid = ref.watch(hasPaidProvider);
 
     return DefaultTabController(
-      length: 5,
+      length: 2,
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
@@ -30,7 +30,7 @@ class MaterialsScreen extends ConsumerWidget {
             onPressed: () => context.pop(),
           ),
           title: const Text(
-            'LEARNING MATERIALS',
+            'LIBRARY',
             style: TextStyle(
               color: Color(0xFF065F2F),
               fontWeight: FontWeight.bold,
@@ -45,29 +45,93 @@ class MaterialsScreen extends ConsumerWidget {
               onPressed: () {},
             ),
           ],
-          bottom: const TabBar(
-            isScrollable: true,
-            indicatorColor: Color(0xFF065F2F),
-            labelColor: Color(0xFF065F2F),
-            unselectedLabelColor: Colors.grey,
-            indicatorSize: TabBarIndicatorSize.label,
-            labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            tabs: [
-              Tab(text: 'All'),
-              Tab(text: 'Notes'),
-              Tab(text: 'Videos'),
-              Tab(text: 'Diagrams'),
-              Tab(text: 'Road Signs'),
-            ],
-          ),
         ),
-        body: TabBarView(
+        body: Column(
           children: [
-            _AllMaterialsView(materialsAsync: materialsAsync, hasPaid: hasPaid),
-            _FilteredMaterialsView(type: 'notes', materialsAsync: materialsAsync, hasPaid: hasPaid),
-            _FilteredMaterialsView(type: 'video', materialsAsync: materialsAsync, hasPaid: hasPaid),
-            _FilteredMaterialsView(type: 'diagram', materialsAsync: materialsAsync, hasPaid: hasPaid),
-            _FilteredMaterialsView(type: 'road_signs', materialsAsync: materialsAsync, hasPaid: hasPaid),
+            // Top Green Banner (Matching UnitsScreen)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF065F2F),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.menu_book, color: Colors.white, size: 30),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Learning Content',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          materialsAsync.when(
+                            data: (materials) {
+                              final docs = materials.where((m) => m.type != 'video').length;
+                              final vids = materials.where((m) => m.type == 'video').length;
+                              return Text(
+                                '$docs Documents • $vids Videos',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              );
+                            },
+                            loading: () => const Text('Loading...', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            error: (_, __) => const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.auto_awesome, color: Colors.white70, size: 24),
+                  ],
+                ),
+              ),
+            ),
+
+            // Tab Bar
+            const TabBar(
+              indicatorColor: Color(0xFF065F2F),
+              labelColor: Color(0xFF065F2F),
+              unselectedLabelColor: Colors.grey,
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              tabs: [
+                Tab(text: 'Documents'),
+                Tab(text: 'Videos'),
+              ],
+            ),
+            const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
+
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _FilteredMaterialsView(
+                    types: const ['notes', 'diagram', 'road_signs'],
+                    materialsAsync: materialsAsync,
+                    hasPaid: hasPaid,
+                  ),
+                  _FilteredMaterialsView(
+                    types: const ['video'],
+                    materialsAsync: materialsAsync,
+                    hasPaid: hasPaid,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -75,59 +139,14 @@ class MaterialsScreen extends ConsumerWidget {
   }
 }
 
-class _AllMaterialsView extends StatelessWidget {
-  const _AllMaterialsView({required this.materialsAsync, required this.hasPaid});
-  final AsyncValue<List<MaterialItem>> materialsAsync;
-  final bool hasPaid;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        _CategoryCard(
-          icon: Icons.book,
-          iconColor: Colors.green,
-          title: 'Study Notes',
-          subtitle: 'Comprehensive notes for all 19 units.',
-          onTap: () => DefaultTabController.of(context).animateTo(1),
-        ),
-        _CategoryCard(
-          icon: Icons.play_arrow,
-          iconColor: Colors.red,
-          title: 'Video Lessons',
-          subtitle: 'Watch expert explanations on key topics.',
-          onTap: () => DefaultTabController.of(context).animateTo(2),
-        ),
-        _CategoryCard(
-          icon: Icons.warning_amber_rounded,
-          iconColor: Colors.amber.shade700,
-          title: 'Road Signs Guide',
-          subtitle: 'Learn all road signs with images and meanings.',
-          onTap: () => DefaultTabController.of(context).animateTo(4),
-        ),
-        _CategoryCard(
-          icon: Icons.settings_outlined,
-          iconColor: Colors.blue,
-          title: 'Driving Basics',
-          subtitle: 'Basics of driving, controls, and safety.',
-          onTap: () {},
-        ),
-        _CategoryCard(
-          icon: Icons.download_for_offline,
-          iconColor: Colors.indigo,
-          title: 'Downloads',
-          subtitle: 'Download PDFs and resources to study offline.',
-          onTap: () {},
-        ),
-      ],
-    );
-  }
-}
-
 class _FilteredMaterialsView extends StatelessWidget {
-  const _FilteredMaterialsView({required this.type, required this.materialsAsync, required this.hasPaid});
-  final String type;
+  const _FilteredMaterialsView({
+    required this.types,
+    required this.materialsAsync,
+    required this.hasPaid,
+  });
+
+  final List<String> types;
   final AsyncValue<List<MaterialItem>> materialsAsync;
   final bool hasPaid;
 
@@ -135,91 +154,29 @@ class _FilteredMaterialsView extends StatelessWidget {
   Widget build(BuildContext context) {
     return materialsAsync.when(
       loading: () => const LoadingView(),
-      error: (e, _) => ErrorView(message: e.toString()),
+      error: (e, _) => ErrorView(
+        message: e.toString(),
+        onRetry: () => materialsAsync, // Riverpod handles state, ideally we would invalidate provider
+      ),
       data: (materials) {
-        final filtered = materials.where((m) => m.type.toLowerCase() == type.toLowerCase()).toList();
+        final filtered = materials
+            .where((m) => types.contains(m.type.toLowerCase()))
+            .toList();
+
         if (filtered.isEmpty) {
-          return Center(child: Text('No $type materials available.'));
+          return const Center(child: Text('No materials available in this category.'));
         }
+
         return ListView.separated(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           itemCount: filtered.length,
           separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) => _MaterialItemTile(item: filtered[index], hasPaid: hasPaid),
+          itemBuilder: (context, index) => _MaterialItemTile(
+            item: filtered[index],
+            hasPaid: hasPaid,
+          ),
         );
       },
-    );
-  }
-}
-
-class _CategoryCard extends StatelessWidget {
-  const _CategoryCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: iconColor, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.3),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: Color(0xFF94A3B8), size: 20),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -232,30 +189,80 @@ class _MaterialItemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locked = !item.isAccessible(hasPaid);
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFF1F5F9)),
-      ),
-      child: ListTile(
-        leading: Icon(
-          item.type == 'video' ? Icons.play_circle_outline : Icons.description_outlined,
-          color: AppColors.primary,
+    final isVideo = item.type.toLowerCase() == 'video';
+
+    return InkWell(
+      onTap: () async {
+        if (locked) {
+          context.push('/unlock?from=${Uri.encodeComponent('/materials')}');
+          return;
+        }
+        final uri = Uri.parse(item.url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFF1F5F9)),
         ),
-        title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(locked ? 'Locked' : item.type.toUpperCase()),
-        trailing: Icon(locked ? Icons.lock_outline : Icons.open_in_new, size: 18),
-        onTap: () async {
-          if (locked) {
-             context.push('/unlock');
-             return;
-          }
-          final uri = Uri.parse(item.url);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
-        },
+        child: Row(
+          children: [
+            // Icon Box (Matching UnitsScreen number box style)
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF065F2F),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                isVideo ? Icons.play_arrow : Icons.description,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 14),
+            // Title and Subtitle
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1E293B),
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isVideo ? 'Video Lesson' : '${item.type.replaceAll('_', ' ').toUpperCase()} Document',
+                    style: const TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Status Icon
+            Icon(
+              locked ? Icons.lock_outline : Icons.chevron_right,
+              color: const Color(0xFF94A3B8),
+              size: 20,
+            ),
+          ],
+        ),
       ),
     );
   }

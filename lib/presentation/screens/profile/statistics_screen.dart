@@ -173,7 +173,7 @@ class StatisticsScreen extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const _SectionHeader(title: 'Recent Mock Tests'),
+                  const _SectionHeader(title: 'Recent Unit Tests'),
                   TextButton(
                     onPressed: () {},
                     child: const Text('View All', style: TextStyle(color: Color(0xFF065F2F), fontWeight: FontWeight.bold)),

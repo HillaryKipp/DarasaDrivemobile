@@ -30,13 +30,41 @@ class PaymentRepositoryImpl implements PaymentRepository {
     return status == 'completed' || status == 'success' || status == 'paid';
   }
 
-  Future<({bool profilePaid, bool paymentCompleted})> _fetchUnlockStatus({
+  Future<Map<String, dynamic>?> _queryStatus(String checkoutRequestId) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/api/public/mpesa/status?checkoutRequestId=$checkoutRequestId',
+    );
+    try {
+      final response = await _http.get(uri);
+      final data = _parseJsonResponse(response);
+      _log('Status query ($checkoutRequestId) -> $data');
+      return data;
+    } catch (e) {
+      _log('Status query error: $e');
+      return null;
+    }
+  }
+
+  Future<({bool profilePaid, bool paymentCompleted, bool paymentFailed})> _fetchUnlockStatus({
     required String userId,
     String? email,
     String? phone,
+    String? checkoutRequestId,
   }) async {
     var profilePaid = false;
     var paymentCompleted = false;
+    var paymentFailed = false;
+
+    // Actively resolve status via Daraja if we have a checkoutRequestId.
+    if (checkoutRequestId != null) {
+      final statusResult = await _queryStatus(checkoutRequestId);
+      final status = statusResult?['status']?.toString().toLowerCase();
+      if (status == 'success') {
+        paymentCompleted = true;
+      } else if (status == 'failed') {
+        paymentFailed = true;
+      }
+    }
 
     try {
       final profile = await _client
@@ -50,24 +78,26 @@ class PaymentRepositoryImpl implements PaymentRepository {
       _log('Profile poll error: $e');
     }
 
-    try {
-      final byUser = await _client
-          .from('payments')
-          .select('status, mpesa_receipt, created_at')
-          .eq('user_id', userId)
-          .eq('purpose', AppConfig.unlockPurpose)
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
-      _log('Payment poll (user_id) -> $byUser');
-      if (_isCompletedPayment(byUser)) {
-        paymentCompleted = true;
+    if (!paymentCompleted && !paymentFailed) {
+      try {
+        final byUser = await _client
+            .from('payments')
+            .select('status, mpesa_receipt, created_at')
+            .eq('user_id', userId)
+            .eq('purpose', AppConfig.unlockPurpose)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+        _log('Payment poll (user_id) -> $byUser');
+        if (_isCompletedPayment(byUser)) {
+          paymentCompleted = true;
+        }
+      } catch (e) {
+        _log('Payment poll (user_id) error: $e');
       }
-    } catch (e) {
-      _log('Payment poll (user_id) error: $e');
     }
 
-    if (!paymentCompleted && email != null && phone != null) {
+    if (!paymentCompleted && !paymentFailed && email != null && phone != null) {
       try {
         final byContact = await _client
             .from('payments')
@@ -87,7 +117,7 @@ class PaymentRepositoryImpl implements PaymentRepository {
       }
     }
 
-    return (profilePaid: profilePaid, paymentCompleted: paymentCompleted);
+    return (profilePaid: profilePaid, paymentCompleted: paymentCompleted, paymentFailed: paymentFailed);
   }
 
   UnlockWaitResult _toWaitResult({
@@ -105,12 +135,14 @@ class PaymentRepositoryImpl implements PaymentRepository {
     required String userId,
     String? email,
     String? phone,
+    String? checkoutRequestId,
   }) async {
     _log('--- CHECK UNLOCK STATUS (userId=$userId) ---');
     final status = await _fetchUnlockStatus(
       userId: userId,
       email: email,
       phone: phone,
+      checkoutRequestId: checkoutRequestId,
     );
     final result = _toWaitResult(
       profilePaid: status.profilePaid,
@@ -118,18 +150,19 @@ class PaymentRepositoryImpl implements PaymentRepository {
     );
     _log(
       'Check result -> confirmed=${result.confirmed}, '
-      'paymentCompleted=${result.paymentCompleted}',
+          'paymentCompleted=${result.paymentCompleted}',
     );
     return result;
   }
 
   @override
   Future<UnlockWaitResult> waitForUnlock(
-    String userId, {
-    String? email,
-    String? phone,
-    int maxAttempts = 30,
-  }) async {
+      String userId, {
+        String? email,
+        String? phone,
+        String? checkoutRequestId,
+        int maxAttempts = 30,
+      }) async {
     _log('--- WAITING FOR UNLOCK (userId=$userId) ---');
 
     var paymentCompleted = false;
@@ -143,11 +176,17 @@ class PaymentRepositoryImpl implements PaymentRepository {
           userId: userId,
           email: email,
           phone: phone,
+          checkoutRequestId: checkoutRequestId,
         );
 
         if (status.profilePaid) {
           _log('Unlock confirmed via profiles.has_paid');
           return _toWaitResult(profilePaid: true, paymentCompleted: false);
+        }
+
+        if (status.paymentFailed) {
+          _log('Payment failed (Daraja result) on attempt ${i + 1}/$maxAttempts');
+          return _toWaitResult(profilePaid: false, paymentCompleted: false);
         }
 
         if (status.paymentCompleted) {
@@ -171,6 +210,7 @@ class PaymentRepositoryImpl implements PaymentRepository {
             userId: userId,
             email: email,
             phone: phone,
+            checkoutRequestId: checkoutRequestId,
           );
 
           if (status.profilePaid) {
@@ -262,7 +302,7 @@ class PaymentRepositoryImpl implements PaymentRepository {
   }
 
   @override
-  Future<void> initiateStkPush({
+  Future<String?> initiateStkPush({
     required String email,
     required String phone,
     required int amount,
@@ -312,7 +352,7 @@ class PaymentRepositoryImpl implements PaymentRepository {
       if (data != null && data['ok'] == false) {
         throw AppException(data['error']?.toString() ?? 'Transaction failed');
       }
-      return;
+      return data?['checkoutRequestId']?.toString();
     }
 
     throw AppException(
