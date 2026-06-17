@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/material_item.dart';
 import '../../domain/entities/question.dart';
@@ -15,6 +16,7 @@ import '../screens/admin/admin_schools_screen.dart';
 import '../screens/admin/admin_units_screen.dart';
 import '../screens/admin/admin_users_screen.dart';
 import '../screens/auth/auth_screen.dart';
+import '../screens/auth/reset_password_screen.dart';
 import '../screens/booking/booking_flow_screen.dart';
 import '../screens/booking/schools_screen.dart';
 import '../screens/home/home_shell.dart';
@@ -43,10 +45,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (isLoading) return null;
 
       final user = authState.valueOrNull?.session?.user;
+      final event = authState.valueOrNull?.event;
       final location = state.matchedLocation;
+
+      // Handle Password Recovery Event
+      if (event == AuthChangeEvent.passwordRecovery) {
+        return '/reset-password';
+      }
+
       final onAuth = location == '/auth';
       final onUnlock = location == '/unlock';
       final onProfile = location == '/profile';
+      final onResetPassword = location == '/reset-password';
       final onAdmin = location.startsWith('/admin');
 
       if (onAdmin) {
@@ -67,7 +77,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           !onUnlock &&
           !onAuth &&
           !onProfile &&
-          !onAdmin) {
+          !onAdmin &&
+          !onResetPassword) {
         return '/unlock?from=${Uri.encodeComponent(state.uri.toString())}';
       }
 
@@ -75,7 +86,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (isAdmin || hasPaid) return '/home';
         return '/unlock';
       }
-      if (onUnlock || onAuth) return null;
       return null;
     },
     routes: [
@@ -90,6 +100,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             prefillPhone: args?.prefillPhone ?? state.uri.queryParameters['phone'],
           );
         },
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => const ResetPasswordScreen(),
       ),
       GoRoute(
         path: '/profile',

@@ -63,6 +63,7 @@ class AuthRepositoryImpl implements AuthRepository {
         email: email,
         password: password,
         data: {'full_name': fullName, 'phone': phone},
+        emailRedirectTo: 'darasadrive://login-callback',
       );
       developer.log(
         'SignUp response userId=${response.user?.id} '
@@ -95,17 +96,24 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> resetPassword(String email) async {
+    print('--- BACKEND CALL: ResetPassword for $email ---');
     developer.log('ResetPassword for $email', name: 'AuthRepo');
     try {
-      await _client.auth.resetPasswordForEmail(email);
+      await _client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'darasadrive://login-callback',
+      );
+      print('--- BACKEND SUCCESS: ResetPassword email sent to $email ---');
       developer.log('ResetPassword email sent', name: 'AuthRepo');
     } on AuthException catch (e) {
+      print('--- BACKEND ERROR: ResetPassword failed. Status: ${e.statusCode}, Message: ${e.message} ---');
       developer.log(
         'ResetPassword AuthException status=${e.statusCode} message=${e.message}',
         name: 'AuthRepo',
       );
       throw AppException(_mapAuthError(e));
     } catch (e) {
+      print('--- BACKEND ERROR: ResetPassword unexpected error: $e ---');
       developer.log('ResetPassword error: $e', name: 'AuthRepo');
       throw AppException('Failed to send reset link. Please try again.');
     }
