@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../domain/entities/admin_user.dart';
 import '../../domain/entities/booking.dart';
 import '../../domain/entities/material_item.dart';
@@ -78,18 +80,35 @@ Booking bookingFromJson(Map<String, dynamic> json) {
 }
 
 MaterialItem materialFromJson(Map<String, dynamic> json) {
-  final units = json['units'];
-  return MaterialItem(
-    id: json['id'] as String,
-    title: json['title'] as String,
-    description: json['description'] as String?,
-    type: json['type'] as String,
-    url: json['url'] as String,
-    isFree: json['is_free'] as bool? ?? false,
-    thumbnailUrl: json['thumbnail_url'] as String?,
-    unitNumber: units is Map ? units['unit_number'] as int? : null,
-    unitTitle: units is Map ? units['title'] as String? : null,
-  );
+  debugPrint('=== PARSING MATERIAL ===');
+  debugPrint('  id: ${json['id']}');
+  debugPrint('  title: ${json['title']}');
+  debugPrint('  type: ${json['type']}');
+  debugPrint('  is_free: ${json['is_free']}');
+  debugPrint('  url length: ${(json['url'] as String?)?.length}');
+  debugPrint('  thumbnail_url length: ${(json['thumbnail_url'] as String?)?.length}');
+  debugPrint('  units: ${json['units']}');
+
+  try {
+    final units = json['units'];
+    final item = MaterialItem(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String?,
+      type: json['type'] as String,
+      url: json['url'] as String,
+      isFree: json['is_free'] as bool? ?? false,
+      thumbnailUrl: json['thumbnail_url'] as String?,
+      unitNumber: units is Map ? units['unit_number'] as int? : null,
+      unitTitle: units is Map ? units['title'] as String? : null,
+    );
+    debugPrint('  ✅ Parsed OK: ${item.title}');
+    return item;
+  } catch (e, st) {
+    debugPrint('  ❌ PARSE ERROR: $e');
+    debugPrint('  $st');
+    rethrow;
+  }
 }
 
 TestAttempt testAttemptFromJson(Map<String, dynamic> json) {

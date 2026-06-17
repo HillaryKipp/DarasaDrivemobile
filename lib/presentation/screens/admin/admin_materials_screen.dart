@@ -20,51 +20,87 @@ class AdminMaterialsScreen extends ConsumerWidget {
       title: 'Materials',
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(context, ref),
-        backgroundColor: const Color(0xFF065F2F),
+        backgroundColor: kAdminGreen,
         child: const Icon(Icons.add),
       ),
       body: materialsAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: e.toString(), onRetry: () => ref.invalidate(materialsProvider)),
-        data: (materials) => ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: materials.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final m = materials[index];
-            return Card(
-              child: ListTile(
-                title: Text(m.title),
-                subtitle: Text('${m.type}${m.unitTitle != null ? ' • ${m.unitTitle}' : ''}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (m.isFree)
-                      const Chip(label: Text('Free')),
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _openForm(context, ref, material: m),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                      onPressed: () => _delete(context, ref, m),
+        error: (e, _) => ErrorView(
+            message: e.toString(),
+            onRetry: () => ref.invalidate(materialsProvider)),
+        data: (materials) => ListView(
+          children: [
+            AdminBanner(
+              icon: Icons.menu_book_outlined,
+              title: 'Materials',
+              subtitle: '${materials.length} items · notes, videos & diagrams',
+            ),
+            const AdminSectionLabel(text: 'All Materials'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  for (int i = 0; i < materials.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 10),
+                    AdminListTile(
+                      icon: materials[i].type == 'video'
+                          ? Icons.play_circle_outline
+                          : Icons.description_outlined,
+                      title: materials[i].title,
+                      subtitle:
+                      '${materials[i].type.replaceAll('_', ' ')}${materials[i].unitTitle != null ? ' · ${materials[i].unitTitle}' : ''}',
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (materials[i].isFree)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDCFCE7),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text('Free',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: kAdminGreen)),
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined,
+                                size: 18, color: kAdminMuted),
+                            onPressed: () =>
+                                _openForm(context, ref, material: materials[i]),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline,
+                                size: 18, color: Colors.redAccent),
+                            onPressed: () =>
+                                _delete(context, ref, materials[i]),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
+                ],
               ),
-            );
-          },
+            ),
+            const SizedBox(height: 100),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _openForm(BuildContext context, WidgetRef ref, {MaterialItem? material}) async {
-    final saved = await context.push<bool>('/admin/materials/form', extra: material);
+  Future<void> _openForm(BuildContext context, WidgetRef ref,
+      {MaterialItem? material}) async {
+    final saved =
+    await context.push<bool>('/admin/materials/form', extra: material);
     if (saved == true) ref.invalidate(materialsProvider);
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, MaterialItem m) async {
+  Future<void> _delete(
+      BuildContext context, WidgetRef ref, MaterialItem m) async {
     if (!await confirmDelete(context, m.title)) return;
     try {
       await ref.read(adminRepositoryProvider).deleteMaterial(m.id);
@@ -76,16 +112,19 @@ class AdminMaterialsScreen extends ConsumerWidget {
   }
 }
 
+// ── Form ──────────────────────────────────────────────────────────────────────
+
 class AdminMaterialFormScreen extends ConsumerStatefulWidget {
   const AdminMaterialFormScreen({super.key, this.material});
-
   final MaterialItem? material;
 
   @override
-  ConsumerState<AdminMaterialFormScreen> createState() => _AdminMaterialFormScreenState();
+  ConsumerState<AdminMaterialFormScreen> createState() =>
+      _AdminMaterialFormScreenState();
 }
 
-class _AdminMaterialFormScreenState extends ConsumerState<AdminMaterialFormScreen> {
+class _AdminMaterialFormScreenState
+    extends ConsumerState<AdminMaterialFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descCtrl;
@@ -157,7 +196,6 @@ class _AdminMaterialFormScreenState extends ConsumerState<AdminMaterialFormScree
   @override
   Widget build(BuildContext context) {
     final unitsAsync = ref.watch(unitsProvider);
-
     return AdminScaffold(
       title: widget.material == null ? 'Add Material' : 'Edit Material',
       body: SingleChildScrollView(
@@ -180,8 +218,11 @@ class _AdminMaterialFormScreenState extends ConsumerState<AdminMaterialFormScree
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: _type,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Type'),
-                items: _types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                items: _types
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
                 onChanged: (v) => setState(() => _type = v ?? 'notes'),
               ),
               const SizedBox(height: 12),
@@ -201,13 +242,14 @@ class _AdminMaterialFormScreenState extends ConsumerState<AdminMaterialFormScree
                 error: (_, __) => const SizedBox.shrink(),
                 data: (units) => DropdownButtonFormField<String?>(
                   value: _unitId,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Unit (optional)'),
                   items: [
                     const DropdownMenuItem(value: null, child: Text('None')),
                     ...units.map((u) => DropdownMenuItem(
-                          value: u.id,
-                          child: Text('Unit ${u.unitNumber}: ${u.title}'),
-                        )),
+                      value: u.id,
+                      child: Text('Unit ${u.unitNumber}: ${u.title}', overflow: TextOverflow.ellipsis),
+                    )),
                   ],
                   onChanged: (v) => setState(() => _unitId = v),
                 ),
@@ -215,6 +257,7 @@ class _AdminMaterialFormScreenState extends ConsumerState<AdminMaterialFormScree
               SwitchListTile(
                 title: const Text('Free access'),
                 value: _isFree,
+                activeColor: kAdminGreen,
                 onChanged: (v) => setState(() => _isFree = v),
               ),
               const SizedBox(height: 24),
@@ -222,6 +265,13 @@ class _AdminMaterialFormScreenState extends ConsumerState<AdminMaterialFormScree
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAdminGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
                   child: Text(_saving ? 'Saving…' : 'Save'),
                 ),
               ),

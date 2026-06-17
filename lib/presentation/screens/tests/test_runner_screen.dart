@@ -28,6 +28,7 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
   int _index = 0;
   final Map<String, String> _answers = {};
   bool _submitted = false;
+  List<Question>? _shuffled;
 
   @override
   Widget build(BuildContext context) {
@@ -87,9 +88,9 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
             ),
           ),
           data: (questions) {
-            // Shuffle so order is random on every attempt
-            final shuffled = [...questions]
-              ..shuffle();
+            // Persist the shuffled order so it doesn't change on every rebuild
+            _shuffled ??= [...questions]..shuffle();
+            final shuffled = _shuffled!;
 
             if (shuffled.isEmpty) {
               return Scaffold(
@@ -119,6 +120,7 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                   _index = 0;
                   _answers.clear();
                   _submitted = false;
+                  _shuffled = null; // Clear shuffled order to get a new one on retry
                   ref.invalidate(questionsProvider(widget.unitId));
                 }),
                 onBack: () => context.go('/tests'),

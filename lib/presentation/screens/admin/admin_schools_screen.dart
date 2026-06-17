@@ -20,49 +20,78 @@ class AdminSchoolsScreen extends ConsumerWidget {
       title: 'Schools',
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(context, ref),
-        backgroundColor: const Color(0xFF065F2F),
+        backgroundColor: kAdminGreen,
         child: const Icon(Icons.add),
       ),
       body: schoolsAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: e.toString(), onRetry: () => ref.invalidate(schoolsProvider)),
-        data: (schools) => ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: schools.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final s = schools[index];
-            return Card(
-              child: ListTile(
-                title: Text(s.name),
-                subtitle: Text('${s.town}, ${s.county} • Ksh ${s.priceFrom}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
+        error: (e, _) => ErrorView(
+            message: e.toString(),
+            onRetry: () => ref.invalidate(schoolsProvider)),
+        data: (schools) => ListView(
+          children: [
+            AdminBanner(
+              icon: Icons.directions_car_outlined,
+              title: 'Driving Schools',
+              subtitle: '${schools.length} school${schools.length == 1 ? '' : 's'} registered',
+              trailingIcon: Icons.pin_drop_outlined,
+            ),
+            if (schools.isEmpty)
+              const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: Text('No schools yet')))
+            else ...[
+              const AdminSectionLabel(text: 'All Schools'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _openForm(context, ref, school: s),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                      onPressed: () => _delete(context, ref, s),
-                    ),
+                    for (int i = 0; i < schools.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      AdminListTile(
+                        icon: Icons.directions_car_outlined,
+                        title: schools[i].name,
+                        subtitle:
+                        '${schools[i].town}, ${schools[i].county} · Ksh ${schools[i].priceFrom}',
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined,
+                                  size: 18, color: kAdminMuted),
+                              onPressed: () =>
+                                  _openForm(context, ref, school: schools[i]),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  size: 18, color: Colors.redAccent),
+                              onPressed: () =>
+                                  _delete(context, ref, schools[i]),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-            );
-          },
+            ],
+            const SizedBox(height: 100),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _openForm(BuildContext context, WidgetRef ref, {School? school}) async {
-    final saved = await context.push<bool>('/admin/schools/form', extra: school);
+  Future<void> _openForm(BuildContext context, WidgetRef ref,
+      {School? school}) async {
+    final saved =
+    await context.push<bool>('/admin/schools/form', extra: school);
     if (saved == true) ref.invalidate(schoolsProvider);
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, School s) async {
+  Future<void> _delete(
+      BuildContext context, WidgetRef ref, School s) async {
     if (!await confirmDelete(context, s.name)) return;
     try {
       await ref.read(adminRepositoryProvider).deleteSchool(s.id);
@@ -74,28 +103,23 @@ class AdminSchoolsScreen extends ConsumerWidget {
   }
 }
 
+// ── Form ──────────────────────────────────────────────────────────────────────
+
 class AdminSchoolFormScreen extends ConsumerStatefulWidget {
   const AdminSchoolFormScreen({super.key, this.school});
-
   final School? school;
 
   @override
-  ConsumerState<AdminSchoolFormScreen> createState() => _AdminSchoolFormScreenState();
+  ConsumerState<AdminSchoolFormScreen> createState() =>
+      _AdminSchoolFormScreenState();
 }
 
-class _AdminSchoolFormScreenState extends ConsumerState<AdminSchoolFormScreen> {
+class _AdminSchoolFormScreenState
+    extends ConsumerState<AdminSchoolFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _nameCtrl;
-  late final TextEditingController _countyCtrl;
-  late final TextEditingController _townCtrl;
-  late final TextEditingController _descCtrl;
-  late final TextEditingController _phoneCtrl;
-  late final TextEditingController _logoCtrl;
-  late final TextEditingController _priceCtrl;
-  late final TextEditingController _ratingCtrl;
-  late final TextEditingController _reviewsCtrl;
-  late final TextEditingController _instructorsCtrl;
-  late final TextEditingController _categoriesCtrl;
+  late final TextEditingController _nameCtrl, _countyCtrl, _townCtrl,
+      _descCtrl, _phoneCtrl, _logoCtrl, _priceCtrl, _ratingCtrl,
+      _reviewsCtrl, _instructorsCtrl, _categoriesCtrl;
   bool _saving = false;
 
   @override
@@ -112,19 +136,16 @@ class _AdminSchoolFormScreenState extends ConsumerState<AdminSchoolFormScreen> {
     _ratingCtrl = TextEditingController(text: s?.rating?.toString() ?? '');
     _reviewsCtrl = TextEditingController(text: s?.reviewCount?.toString() ?? '');
     _instructorsCtrl = TextEditingController(text: s?.instructorsCount.toString() ?? '0');
-    _categoriesCtrl = TextEditingController(
-      text: s?.vehicleCategories.join(', ') ?? 'B, C',
-    );
+    _categoriesCtrl = TextEditingController(text: s?.vehicleCategories.join(', ') ?? 'B, C');
   }
 
   @override
   void dispose() {
     for (final c in [
       _nameCtrl, _countyCtrl, _townCtrl, _descCtrl, _phoneCtrl,
-      _logoCtrl, _priceCtrl, _ratingCtrl, _reviewsCtrl, _instructorsCtrl, _categoriesCtrl,
-    ]) {
-      c.dispose();
-    }
+      _logoCtrl, _priceCtrl, _ratingCtrl, _reviewsCtrl,
+      _instructorsCtrl, _categoriesCtrl,
+    ]) { c.dispose(); }
     super.dispose();
   }
 
@@ -134,51 +155,33 @@ class _AdminSchoolFormScreenState extends ConsumerState<AdminSchoolFormScreen> {
     try {
       final repo = ref.read(adminRepositoryProvider);
       final categories = _categoriesCtrl.text
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-      final payload = (
-        name: _nameCtrl.text.trim(),
-        county: _countyCtrl.text.trim(),
-        town: _townCtrl.text.trim(),
-        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        contactPhone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-        logoUrl: _logoCtrl.text.trim().isEmpty ? null : _logoCtrl.text.trim(),
-        priceFrom: int.parse(_priceCtrl.text.trim()),
-        rating: _ratingCtrl.text.trim().isEmpty ? null : double.tryParse(_ratingCtrl.text.trim()),
-        reviewCount: _reviewsCtrl.text.trim().isEmpty ? null : int.tryParse(_reviewsCtrl.text.trim()),
-        instructorsCount: int.parse(_instructorsCtrl.text.trim()),
-        vehicleCategories: categories,
-      );
+          .split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
       if (widget.school == null) {
         await repo.createSchool(
-          name: payload.name,
-          county: payload.county,
-          town: payload.town,
-          description: payload.description,
-          contactPhone: payload.contactPhone,
-          logoUrl: payload.logoUrl,
-          priceFrom: payload.priceFrom,
-          rating: payload.rating,
-          reviewCount: payload.reviewCount,
-          instructorsCount: payload.instructorsCount,
-          vehicleCategories: payload.vehicleCategories,
+          name: _nameCtrl.text.trim(), county: _countyCtrl.text.trim(),
+          town: _townCtrl.text.trim(),
+          description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+          contactPhone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+          logoUrl: _logoCtrl.text.trim().isEmpty ? null : _logoCtrl.text.trim(),
+          priceFrom: int.parse(_priceCtrl.text.trim()),
+          rating: _ratingCtrl.text.trim().isEmpty ? null : double.tryParse(_ratingCtrl.text.trim()),
+          reviewCount: _reviewsCtrl.text.trim().isEmpty ? null : int.tryParse(_reviewsCtrl.text.trim()),
+          instructorsCount: int.parse(_instructorsCtrl.text.trim()),
+          vehicleCategories: categories,
         );
       } else {
         await repo.updateSchool(
           id: widget.school!.id,
-          name: payload.name,
-          county: payload.county,
-          town: payload.town,
-          description: payload.description,
-          contactPhone: payload.contactPhone,
-          logoUrl: payload.logoUrl,
-          priceFrom: payload.priceFrom,
-          rating: payload.rating,
-          reviewCount: payload.reviewCount,
-          instructorsCount: payload.instructorsCount,
-          vehicleCategories: payload.vehicleCategories,
+          name: _nameCtrl.text.trim(), county: _countyCtrl.text.trim(),
+          town: _townCtrl.text.trim(),
+          description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+          contactPhone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+          logoUrl: _logoCtrl.text.trim().isEmpty ? null : _logoCtrl.text.trim(),
+          priceFrom: int.parse(_priceCtrl.text.trim()),
+          rating: _ratingCtrl.text.trim().isEmpty ? null : double.tryParse(_ratingCtrl.text.trim()),
+          reviewCount: _reviewsCtrl.text.trim().isEmpty ? null : int.tryParse(_reviewsCtrl.text.trim()),
+          instructorsCount: int.parse(_instructorsCtrl.text.trim()),
+          vehicleCategories: categories,
         );
       }
       if (mounted) context.pop(true);
@@ -219,16 +222,18 @@ class _AdminSchoolFormScreenState extends ConsumerState<AdminSchoolFormScreen> {
               const SizedBox(height: 12),
               TextFormField(controller: _instructorsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Instructors count'), validator: _req),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _categoriesCtrl,
-                decoration: const InputDecoration(labelText: 'Vehicle categories (comma-separated)', hintText: 'B, C'),
-                validator: _req,
-              ),
+              TextFormField(controller: _categoriesCtrl, decoration: const InputDecoration(labelText: 'Vehicle categories (comma-separated)', hintText: 'B, C'), validator: _req),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAdminGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                   child: Text(_saving ? 'Saving…' : 'Save'),
                 ),
               ),

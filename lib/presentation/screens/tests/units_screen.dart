@@ -83,7 +83,7 @@ class UnitsScreen extends ConsumerWidget {
                           const SizedBox(height: 4),
                           unitsAsync.when(
                             data: (units) => Text(
-                              '${units.length} Units • Over 950 questions',
+                              '${units.length} Units • 100+ Questions',
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                             loading: () => const Text('Loading...', style: TextStyle(color: Colors.white70, fontSize: 12)),
@@ -92,12 +92,11 @@ class UnitsScreen extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    // Overall dynamic progress calculation
                     unitsAsync.when(
                       data: (units) {
                         if (units.isEmpty) return const SizedBox.shrink();
                         final attempts = attemptsAsync.valueOrNull ?? [];
-                        
+
                         final bestScores = <String, double>{};
                         for (final a in attempts) {
                           final p = a.total == 0 ? 0.0 : a.score / a.total;
@@ -150,49 +149,71 @@ class UnitsScreen extends ConsumerWidget {
               indicatorSize: TabBarIndicatorSize.tab,
               labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               tabs: [
+                Tab(text: 'Free Units'),
                 Tab(text: 'All Units'),
-                Tab(text: 'My Progress'),
               ],
             ),
             const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
 
             Expanded(
-              child: TabBarView(
-                children: [
-                  unitsAsync.when(
-                    loading: () => const LoadingView(),
-                    error: (e, _) => ErrorView(
-                      message: e.toString(),
-                      onRetry: () => ref.invalidate(unitsProvider),
-                    ),
-                    data: (units) {
-                      final attempts = attemptsAsync.valueOrNull ?? [];
-                      // Pre-calculate best scores for fast lookup
-                      final bestScores = <String, double>{};
-                      for (final a in attempts) {
-                        final p = a.total == 0 ? 0.0 : a.score / a.total;
-                        if (p > (bestScores[a.unitId] ?? 0.0)) {
-                          bestScores[a.unitId] = p;
-                        }
-                      }
+              child: unitsAsync.when(
+                loading: () => const LoadingView(),
+                error: (e, _) => ErrorView(
+                  message: e.toString(),
+                  onRetry: () => ref.invalidate(unitsProvider),
+                ),
+                data: (units) {
+                  final attempts = attemptsAsync.valueOrNull ?? [];
 
-                      return ListView.separated(
+                  final bestScores = <String, double>{};
+                  for (final a in attempts) {
+                    final p = a.total == 0 ? 0.0 : a.score / a.total;
+                    if (p > (bestScores[a.unitId] ?? 0.0)) {
+                      bestScores[a.unitId] = p;
+                    }
+                  }
+
+                  final freeUnits = units.where((u) => u.isAccessible(false)).toList();
+                  final allUnits = units;
+
+                  return TabBarView(
+                    children: [
+                      // ── Free Units tab ──────────────────────────────────
+                      freeUnits.isEmpty
+                          ? const Center(child: Text('No free units available'))
+                          : ListView.separated(
                         padding: const EdgeInsets.all(16),
-                        itemCount: units.length + (hasPaid ? 0 : 1),
-                        separatorBuilder: (context, index) => const SizedBox(height: 12),
+                        itemCount: freeUnits.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
-                          if (index == units.length && !hasPaid) {
+                          final unit = freeUnits[index];
+                          final progress = bestScores[unit.id];
+                          return _UnitListItem(
+                            unit: unit,
+                            hasPaid: hasPaid,
+                            progress: progress,
+                            onTap: () => context.go('/tests/${unit.id}'),
+                          );
+                        },
+                      ),
+
+                      // ── All Units tab ───────────────────────────────────
+                      ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: allUnits.length + (hasPaid ? 0 : 1),
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          if (index == allUnits.length && !hasPaid) {
                             return _UnlockBanner(
                               onTap: () => context.push(
                                 '/unlock?from=${Uri.encodeComponent('/tests')}',
                               ),
                             );
                           }
-                          if (index >= units.length) return null;
+                          if (index >= allUnits.length) return const SizedBox.shrink();
 
-                          final unit = units[index];
+                          final unit = allUnits[index];
                           final progress = bestScores[unit.id];
-
                           return _UnitListItem(
                             unit: unit,
                             hasPaid: hasPaid,
@@ -207,11 +228,10 @@ class UnitsScreen extends ConsumerWidget {
                             },
                           );
                         },
-                      );
-                    },
-                  ),
-                  const Center(child: Text('Performance analysis coming soon')),
-                ],
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -255,7 +275,7 @@ class _UnitListItem extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF065F2F),
+                color: locked ? const Color(0xFF94A3B8) : const Color(0xFF065F2F),
                 borderRadius: BorderRadius.circular(6),
               ),
               alignment: Alignment.center,
@@ -276,18 +296,18 @@ class _UnitListItem extends StatelessWidget {
                 children: [
                   Text(
                     unit.title.toUpperCase(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFF1E293B),
+                      color: locked ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
                       letterSpacing: 0.2,
                     ),
                   ),
                   const SizedBox(height: 2),
-                  const Text(
-                    'Practice Quiz',
+                  Text(
+                    locked ? 'Unlock to access' : 'Practice Quiz',
                     style: TextStyle(
-                      color: Color(0xFF64748B),
+                      color: locked ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                       fontSize: 11,
                     ),
                   ),
@@ -364,10 +384,12 @@ class _UnlockBanner extends StatelessWidget {
           ElevatedButton(
             onPressed: onTap,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF065F2F),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
               elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Unlock now'),
+            child: const Text('Unlock Full Access'),
           ),
         ],
       ),

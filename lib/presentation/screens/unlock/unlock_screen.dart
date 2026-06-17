@@ -31,16 +31,27 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   String? _lastCheckoutRequestId;
 
   static const _perks = [
-    'All 16 NTSA units + 950+ questions',
-    'Every PDF and video material',
+    'Driving tests',
+    'PDF and video materials',
     'Progress analytics and weak-area insights',
-    'Book practical lessons with partner schools',
   ];
 
   @override
   void initState() {
     super.initState();
+    // Pre-fill 254 prefix
+    _phoneController.text = '254';
+    _phoneController.addListener(_handlePhonePrefix);
     WidgetsBinding.instance.addPostFrameCallback((_) => _prefillFromUser());
+  }
+
+  void _handlePhonePrefix() {
+    if (!_phoneController.text.startsWith('254')) {
+      _phoneController.text = '254';
+      _phoneController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _phoneController.text.length),
+      );
+    }
   }
 
   void _prefillFromUser() {
@@ -50,14 +61,27 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     }
     ref.read(userProfileProvider.future).then((profile) {
       if (!mounted) return;
-      if (profile?.phone != null && profile!.phone!.isNotEmpty) {
-        _phoneController.text = profile.phone!;
+      String? phone = profile?.phone;
+      if (phone != null && phone.isNotEmpty) {
+        // Normalize phone number to 254 format
+        if (phone.startsWith('0')) {
+          phone = '254${phone.substring(1)}';
+        } else if (phone.startsWith('+')) {
+          phone = phone.substring(1);
+        } else if (!phone.startsWith('254') && phone.length == 9) {
+          phone = '254$phone';
+        }
+
+        if (phone.startsWith('254')) {
+          _phoneController.text = phone;
+        }
       }
     }).catchError((_) {});
   }
 
   @override
   void dispose() {
+    _phoneController.removeListener(_handlePhonePrefix);
     _emailController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -112,7 +136,6 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Full access unlocked!')),
         );
-        // Navigate back to the intended destination or home
         if (widget.from != null && widget.from!.isNotEmpty) {
           context.go(widget.from!);
         } else {
@@ -151,12 +174,22 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     required String phone,
     String? checkoutRequestId,
   }) async {
+    // Phase 1: prompt the user to act on their phone
     setState(() {
       _loading = false;
       _waiting = true;
       _overlayMessage =
-      'Waiting for payment confirmation…\n'
-          'Authorize the M-Pesa prompt on your phone.';
+      'M-Pesa prompt sent!\n'
+          'Open your phone and enter your PIN to authorize.';
+    });
+
+    // Give user time to read the message and act
+    await Future<void>.delayed(const Duration(seconds: 3));
+    if (!mounted) return;
+
+    // Phase 2: switch to polling indicator
+    setState(() {
+      _overlayMessage = 'Waiting for payment confirmation…';
     });
 
     final result = await ref.read(paymentRepositoryProvider).waitForUnlock(
@@ -184,6 +217,16 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter your email and M-Pesa phone number.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (!RegExp(r'^254[17]\d{8}$').hasMatch(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid M-Pesa number starting with 2547... or 2541...'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -242,6 +285,16 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
       return;
     }
 
+    if (!RegExp(r'^254[17]\d{8}$').hasMatch(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid M-Pesa number starting with 2547... or 2541...'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     _clearError();
     setState(() {
       _loading = true;
@@ -260,11 +313,6 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
       _lastCheckoutRequestId = checkoutRequestId;
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('STK push sent. Check your phone to authorize.'),
-        ),
-      );
 
       await _waitForPayment(
         userId: user.id,
@@ -331,7 +379,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                         Text(
                           isLoggedIn
                               ? 'Pay via M-Pesa to unlock full access (test pricing).'
-                              : 'Register first, verify your email, then sign in to pay.',
+                              : 'Register first if not registered, then sign in to pay.',
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.white70, fontSize: 13),
                         ),
@@ -448,12 +496,15 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                               decoration: BoxDecoration(
                                 color: Colors.redAccent.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                                border: Border.all(
+                                  color: Colors.redAccent.withValues(alpha: 0.3),
+                                ),
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                                  const Icon(Icons.error_outline,
+                                      color: Colors.redAccent, size: 20),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
@@ -496,9 +547,11 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
             ),
           ),
           if (busy)
-            ColoredBox(
-              color: Colors.black54,
-              child: LoadingView(message: _overlayMessage),
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.5),
+                child: LoadingView(message: _overlayMessage),
+              ),
             ),
         ],
       ),

@@ -14,7 +14,8 @@ class AdminQuestionsScreen extends ConsumerStatefulWidget {
   const AdminQuestionsScreen({super.key});
 
   @override
-  ConsumerState<AdminQuestionsScreen> createState() => _AdminQuestionsScreenState();
+  ConsumerState<AdminQuestionsScreen> createState() =>
+      _AdminQuestionsScreenState();
 }
 
 class _AdminQuestionsScreenState extends ConsumerState<AdminQuestionsScreen> {
@@ -29,39 +30,60 @@ class _AdminQuestionsScreenState extends ConsumerState<AdminQuestionsScreen> {
       floatingActionButton: _selectedUnitId == null
           ? null
           : FloatingActionButton(
-              onPressed: () => _openForm(context, unitId: _selectedUnitId!),
-              backgroundColor: const Color(0xFF065F2F),
-              child: const Icon(Icons.add),
-            ),
+        onPressed: () => _openForm(context, unitId: _selectedUnitId!),
+        backgroundColor: kAdminGreen,
+        child: const Icon(Icons.add),
+      ),
       body: unitsAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: e.toString(), onRetry: () => ref.invalidate(unitsProvider)),
+        error: (e, _) => ErrorView(
+            message: e.toString(),
+            onRetry: () => ref.invalidate(unitsProvider)),
         data: (units) {
           _selectedUnitId ??= units.isNotEmpty ? units.first.id : null;
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const AdminBanner(
+                icon: Icons.quiz_outlined,
+                title: 'Questions',
+                subtitle: 'Browse and manage quiz questions by unit',
+              ),
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: DropdownButtonFormField<String>(
                   value: _selectedUnitId,
-                  decoration: const InputDecoration(
+                  isExpanded: true,
+                  decoration: InputDecoration(
                     labelText: 'Select unit',
-                    border: OutlineInputBorder(),
+                    labelStyle: const TextStyle(color: kAdminMuted),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide:
+                      const BorderSide(color: kAdminGreen, width: 1.5),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
                   ),
                   items: units
                       .map((u) => DropdownMenuItem(
-                            value: u.id,
-                            child: Text('Unit ${u.unitNumber}: ${u.title}'),
-                          ))
+                    value: u.id,
+                    child: Text('Unit ${u.unitNumber}: ${u.title}',
+                        overflow: TextOverflow.ellipsis),
+                  ))
                       .toList(),
                   onChanged: (v) => setState(() => _selectedUnitId = v),
                 ),
               ),
-              Expanded(
-                child: _selectedUnitId == null
-                    ? const Center(child: Text('No units available'))
-                    : _QuestionsList(unitId: _selectedUnitId!),
-              ),
+              if (_selectedUnitId == null)
+                const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: Text('No units available')))
+              else
+                Expanded(child: _QuestionsList(unitId: _selectedUnitId!)),
             ],
           );
         },
@@ -69,7 +91,8 @@ class _AdminQuestionsScreenState extends ConsumerState<AdminQuestionsScreen> {
     );
   }
 
-  Future<void> _openForm(BuildContext context, {required String unitId, Question? question}) async {
+  Future<void> _openForm(BuildContext context,
+      {required String unitId, Question? question}) async {
     final saved = await context.push<bool>(
       '/admin/questions/form',
       extra: {'unitId': unitId, 'question': question},
@@ -80,7 +103,6 @@ class _AdminQuestionsScreenState extends ConsumerState<AdminQuestionsScreen> {
 
 class _QuestionsList extends ConsumerWidget {
   const _QuestionsList({required this.unitId});
-
   final String unitId;
 
   @override
@@ -90,51 +112,57 @@ class _QuestionsList extends ConsumerWidget {
     return questionsAsync.when(
       loading: () => const LoadingView(),
       error: (e, _) => ErrorView(
-        message: e.toString(),
-        onRetry: () => ref.invalidate(adminQuestionsProvider(unitId)),
-      ),
+          message: e.toString(),
+          onRetry: () => ref.invalidate(adminQuestionsProvider(unitId))),
       data: (questions) {
         if (questions.isEmpty) {
           return const Center(child: Text('No questions for this unit'));
         }
-        return ListView.separated(
+        return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: questions.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final q = questions[index];
-            return Card(
-              child: ListTile(
-                title: Text(q.questionText, maxLines: 2, overflow: TextOverflow.ellipsis),
-                subtitle: Text('Answer: ${q.correctOption}'),
-                isThreeLine: true,
+          children: [
+            AdminSectionLabel(text: '${questions.length} Questions'),
+            for (int i = 0; i < questions.length; i++) ...[
+              if (i > 0) const SizedBox(height: 10),
+              AdminListTile(
+                icon: Icons.help_outline,
+                title: questions[i].questionText,
+                subtitle: 'Answer: ${questions[i].correctOption}',
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => context.push<bool>(
+                      icon: const Icon(Icons.edit_outlined,
+                          size: 18, color: kAdminMuted),
+                      onPressed: () => context
+                          .push<bool>(
                         '/admin/questions/form',
-                        extra: {'unitId': unitId, 'question': q},
-                      ).then((saved) {
-                        if (saved == true) ref.invalidate(adminQuestionsProvider(unitId));
+                        extra: {'unitId': unitId, 'question': questions[i]},
+                      )
+                          .then((saved) {
+                        if (saved == true) {
+                          ref.invalidate(adminQuestionsProvider(unitId));
+                        }
                       }),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                      onPressed: () => _delete(context, ref, q),
+                      icon: const Icon(Icons.delete_outline,
+                          size: 18, color: Colors.redAccent),
+                      onPressed: () => _delete(context, ref, questions[i]),
                     ),
                   ],
                 ),
               ),
-            );
-          },
+            ],
+            const SizedBox(height: 100),
+          ],
         );
       },
     );
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, Question q) async {
+  Future<void> _delete(
+      BuildContext context, WidgetRef ref, Question q) async {
     if (!await confirmDelete(context, q.questionText)) return;
     try {
       await ref.read(adminRepositoryProvider).deleteQuestion(q.id);
@@ -146,17 +174,22 @@ class _QuestionsList extends ConsumerWidget {
   }
 }
 
+// ── Form ──────────────────────────────────────────────────────────────────────
+
 class AdminQuestionFormScreen extends ConsumerStatefulWidget {
-  const AdminQuestionFormScreen({super.key, required this.unitId, this.question});
+  const AdminQuestionFormScreen(
+      {super.key, required this.unitId, this.question});
 
   final String unitId;
   final Question? question;
 
   @override
-  ConsumerState<AdminQuestionFormScreen> createState() => _AdminQuestionFormScreenState();
+  ConsumerState<AdminQuestionFormScreen> createState() =>
+      _AdminQuestionFormScreenState();
 }
 
-class _AdminQuestionFormScreenState extends ConsumerState<AdminQuestionFormScreen> {
+class _AdminQuestionFormScreenState
+    extends ConsumerState<AdminQuestionFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _textCtrl;
   late final TextEditingController _imageCtrl;
@@ -184,13 +217,10 @@ class _AdminQuestionFormScreenState extends ConsumerState<AdminQuestionFormScree
 
   @override
   void dispose() {
-    _textCtrl.dispose();
-    _imageCtrl.dispose();
-    _optACtrl.dispose();
-    _optBCtrl.dispose();
-    _optCCtrl.dispose();
-    _optDCtrl.dispose();
-    _explanationCtrl.dispose();
+    for (final c in [
+      _textCtrl, _imageCtrl, _optACtrl, _optBCtrl,
+      _optCCtrl, _optDCtrl, _explanationCtrl
+    ]) { c.dispose(); }
     super.dispose();
   }
 
@@ -199,41 +229,25 @@ class _AdminQuestionFormScreenState extends ConsumerState<AdminQuestionFormScree
     setState(() => _saving = true);
     try {
       final repo = ref.read(adminRepositoryProvider);
-      final payload = (
-        unitId: widget.unitId,
-        questionText: _textCtrl.text.trim(),
-        imageUrl: _imageCtrl.text.trim().isEmpty ? null : _imageCtrl.text.trim(),
-        optionA: _optACtrl.text.trim(),
-        optionB: _optBCtrl.text.trim(),
-        optionC: _optCCtrl.text.trim(),
-        optionD: _optDCtrl.text.trim(),
-        correctOption: _correctOption,
-        explanation: _explanationCtrl.text.trim().isEmpty ? null : _explanationCtrl.text.trim(),
-      );
       if (widget.question == null) {
         await repo.createQuestion(
-          unitId: payload.unitId,
-          questionText: payload.questionText,
-          imageUrl: payload.imageUrl,
-          optionA: payload.optionA,
-          optionB: payload.optionB,
-          optionC: payload.optionC,
-          optionD: payload.optionD,
-          correctOption: payload.correctOption,
-          explanation: payload.explanation,
+          unitId: widget.unitId,
+          questionText: _textCtrl.text.trim(),
+          imageUrl: _imageCtrl.text.trim().isEmpty ? null : _imageCtrl.text.trim(),
+          optionA: _optACtrl.text.trim(), optionB: _optBCtrl.text.trim(),
+          optionC: _optCCtrl.text.trim(), optionD: _optDCtrl.text.trim(),
+          correctOption: _correctOption,
+          explanation: _explanationCtrl.text.trim().isEmpty ? null : _explanationCtrl.text.trim(),
         );
       } else {
         await repo.updateQuestion(
-          id: widget.question!.id,
-          unitId: payload.unitId,
-          questionText: payload.questionText,
-          imageUrl: payload.imageUrl,
-          optionA: payload.optionA,
-          optionB: payload.optionB,
-          optionC: payload.optionC,
-          optionD: payload.optionD,
-          correctOption: payload.correctOption,
-          explanation: payload.explanation,
+          id: widget.question!.id, unitId: widget.unitId,
+          questionText: _textCtrl.text.trim(),
+          imageUrl: _imageCtrl.text.trim().isEmpty ? null : _imageCtrl.text.trim(),
+          optionA: _optACtrl.text.trim(), optionB: _optBCtrl.text.trim(),
+          optionC: _optCCtrl.text.trim(), optionD: _optDCtrl.text.trim(),
+          correctOption: _correctOption,
+          explanation: _explanationCtrl.text.trim().isEmpty ? null : _explanationCtrl.text.trim(),
         );
       }
       if (mounted) context.pop(true);
@@ -254,28 +268,28 @@ class _AdminQuestionFormScreenState extends ConsumerState<AdminQuestionFormScree
           key: _formKey,
           child: Column(
             children: [
-              TextFormField(
-                controller: _textCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Question text'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
+              TextFormField(controller: _textCtrl, maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Question text'),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _imageCtrl,
-                decoration: const InputDecoration(labelText: 'Image URL (optional)'),
-              ),
+              TextFormField(controller: _imageCtrl,
+                  decoration: const InputDecoration(labelText: 'Image URL (optional)')),
               const SizedBox(height: 12),
-              TextFormField(controller: _optACtrl, decoration: const InputDecoration(labelText: 'Option A'), validator: _req),
+              TextFormField(controller: _optACtrl,
+                  decoration: const InputDecoration(labelText: 'Option A'), validator: _req),
               const SizedBox(height: 8),
-              TextFormField(controller: _optBCtrl, decoration: const InputDecoration(labelText: 'Option B'), validator: _req),
+              TextFormField(controller: _optBCtrl,
+                  decoration: const InputDecoration(labelText: 'Option B'), validator: _req),
               const SizedBox(height: 8),
-              TextFormField(controller: _optCCtrl, decoration: const InputDecoration(labelText: 'Option C'), validator: _req),
+              TextFormField(controller: _optCCtrl,
+                  decoration: const InputDecoration(labelText: 'Option C'), validator: _req),
               const SizedBox(height: 8),
-              TextFormField(controller: _optDCtrl, decoration: const InputDecoration(labelText: 'Option D'), validator: _req),
+              TextFormField(controller: _optDCtrl,
+                  decoration: const InputDecoration(labelText: 'Option D'), validator: _req),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: _correctOption,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Correct option'),
                 items: const ['A', 'B', 'C', 'D']
                     .map((o) => DropdownMenuItem(value: o, child: Text(o)))
@@ -283,16 +297,20 @@ class _AdminQuestionFormScreenState extends ConsumerState<AdminQuestionFormScree
                 onChanged: (v) => setState(() => _correctOption = v ?? 'A'),
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _explanationCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Explanation (optional)'),
-              ),
+              TextFormField(controller: _explanationCtrl, maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Explanation (optional)')),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAdminGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
                   child: Text(_saving ? 'Saving…' : 'Save'),
                 ),
               ),

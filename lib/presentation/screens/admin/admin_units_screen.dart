@@ -20,51 +20,91 @@ class AdminUnitsScreen extends ConsumerWidget {
       title: 'Units',
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(context, ref),
-        backgroundColor: const Color(0xFF065F2F),
+        backgroundColor: kAdminGreen,
         child: const Icon(Icons.add),
       ),
       body: unitsAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: e.toString(), onRetry: () => ref.invalidate(unitsProvider)),
-        data: (units) => ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: units.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final unit = units[index];
-            return Card(
-              child: ListTile(
-                title: Text('Unit ${unit.unitNumber}: ${unit.title}'),
-                subtitle: Text(
-                  unit.isFreePreview ? 'Free preview' : 'Premium',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
+        error: (e, _) => ErrorView(
+            message: e.toString(),
+            onRetry: () => ref.invalidate(unitsProvider)),
+        data: (units) => ListView(
+          children: [
+            AdminBanner(
+              icon: Icons.library_books_outlined,
+              title: 'Test Units',
+              subtitle: '${units.length} unit${units.length == 1 ? '' : 's'} · theory & practical',
+              trailingIcon: Icons.checklist_outlined,
+            ),
+            if (units.isEmpty)
+              const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: Text('No units yet')))
+            else ...[
+              const AdminSectionLabel(text: 'All Units'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _openForm(context, ref, unit: unit),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                      onPressed: () => _delete(context, ref, unit),
-                    ),
+                    for (int i = 0; i < units.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      AdminListTile(
+                        icon: Icons.library_books_outlined,
+                        title: 'Unit ${units[i].unitNumber}: ${units[i].title}',
+                        subtitle: units[i].isFreePreview
+                            ? 'Free preview'
+                            : 'Premium',
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (units[i].isFreePreview)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Text('Free',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: kAdminGreen)),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined,
+                                  size: 18, color: kAdminMuted),
+                              onPressed: () =>
+                                  _openForm(context, ref, unit: units[i]),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  size: 18, color: Colors.redAccent),
+                              onPressed: () => _delete(context, ref, units[i]),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-            );
-          },
+            ],
+            const SizedBox(height: 100),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _openForm(BuildContext context, WidgetRef ref, {Unit? unit}) async {
+  Future<void> _openForm(BuildContext context, WidgetRef ref,
+      {Unit? unit}) async {
     final saved = await context.push<bool>('/admin/units/form', extra: unit);
     if (saved == true) ref.invalidate(unitsProvider);
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, Unit unit) async {
+  Future<void> _delete(
+      BuildContext context, WidgetRef ref, Unit unit) async {
     if (!await confirmDelete(context, unit.title)) return;
     try {
       await ref.read(adminRepositoryProvider).deleteUnit(unit.id);
@@ -76,13 +116,15 @@ class AdminUnitsScreen extends ConsumerWidget {
   }
 }
 
+// ── Form ──────────────────────────────────────────────────────────────────────
+
 class AdminUnitFormScreen extends ConsumerStatefulWidget {
   const AdminUnitFormScreen({super.key, this.unit});
-
   final Unit? unit;
 
   @override
-  ConsumerState<AdminUnitFormScreen> createState() => _AdminUnitFormScreenState();
+  ConsumerState<AdminUnitFormScreen> createState() =>
+      _AdminUnitFormScreenState();
 }
 
 class _AdminUnitFormScreenState extends ConsumerState<AdminUnitFormScreen> {
@@ -172,6 +214,7 @@ class _AdminUnitFormScreenState extends ConsumerState<AdminUnitFormScreen> {
               SwitchListTile(
                 title: const Text('Free preview'),
                 value: _isFreePreview,
+                activeColor: kAdminGreen,
                 onChanged: (v) => setState(() => _isFreePreview = v),
               ),
               const SizedBox(height: 24),
@@ -179,6 +222,13 @@ class _AdminUnitFormScreenState extends ConsumerState<AdminUnitFormScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAdminGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
                   child: Text(_saving ? 'Saving…' : 'Save'),
                 ),
               ),

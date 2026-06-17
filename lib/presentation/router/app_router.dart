@@ -22,6 +22,7 @@ import '../screens/home/home_tab.dart';
 import '../screens/materials/materials_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/profile/statistics_screen.dart';
+import '../screens/support/support.dart';
 import '../screens/tests/test_runner_screen.dart';
 import '../screens/tests/units_screen.dart';
 import '../screens/unlock/unlock_screen.dart';
@@ -203,23 +204,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/materials',
-                builder: (context, state) => const MaterialsScreen(),
+                builder: (context, state) {
+                  final tab = state.uri.queryParameters['tab'];
+                  return MaterialsScreen(
+                    initialTab: tab == 'videos' ? 1 : 0,
+                  );
+                },
               ),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/booking',
-                builder: (context, state) => const SchoolsScreen(),
-                routes: [
-                  GoRoute(
-                    path: ':schoolId',
-                    builder: (context, state) => BookingFlowScreen(
-                      schoolId: state.pathParameters['schoolId']!,
-                    ),
-                  ),
-                ],
+                path: '/support',
+                builder: (context, state) => const SupportTab(),
               ),
             ],
           ),
@@ -238,7 +236,5 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 });
 
 bool _requiresAuth(String location) {
-  return location.startsWith('/stats') ||
-      location.startsWith('/booking/') ||
-      location.contains('/booking/');
+  return location.startsWith('/stats');
 }
