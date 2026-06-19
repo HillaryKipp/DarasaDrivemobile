@@ -126,12 +126,12 @@ class SupportTab extends StatelessWidget {
                     _FaqTile(
                       question: 'How do I unlock full access?',
                       answer:
-                      'After signing up and verifying your email, sign in and tap "Unlock Full Access". You\'ll be guided through an M-Pesa payment to activate your subscription.',
+                      'After signing up and verifying your email, sign in and tap "Unlock Full Access". You\'ll be guided through an payment to activate your subscription.',
                     ),
                     _FaqTile(
                       question: 'I paid but the app is still locked. What do I do?',
                       answer:
-                      'Payments are confirmed automatically within a few minutes. If access isn\'t restored after 10 minutes, contact us on WhatsApp with your M-Pesa transaction code and we\'ll sort it out immediately.',
+                      'Payments are confirmed automatically within a few minutes. If access isn\'t restored after 10 minutes, contact us on WhatsApp with your transaction code and we\'ll sort it out immediately.',
                     ),
                     _FaqTile(
                       question: 'Can I use the app on multiple devices?',
@@ -327,7 +327,7 @@ class _PrivacyPolicySheet extends StatelessWidget {
                       title: '2. Information We Collect',
                       body:
                       'Account data – your full name, email address, and M-Pesa phone number when you register.\n\n'
-                          'Payment data – M-Pesa transaction codes processed via Safaricom Daraja API. We do not store card numbers or PINs.\n\n'
+                          'Payment data – Transaction codes processed via Safaricom Daraja API. We do not store card numbers or PINs.\n\n'
                           'Usage data – test scores, units completed, session timestamps, and device type. This data is tied to your account to power progress tracking.\n\n'
                           'We do not collect location data, contacts, camera, or microphone access.',
                     ),

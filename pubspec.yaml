@@ -1,7 +1,7 @@
 name: darasadrive_mobile
 description: DarasaDrive — Theory tests (Flutter mobile).
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+6
 
 environment:
   sdk: ^3.11.0
@@ -21,6 +21,7 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^33.2.13
   webview_flutter: ^4.10.0        # ← add this explicitly
   youtube_player_iframe: ^6.0.2
+  in_app_purchase: ^3.2.0
 
 dev_dependencies:
   flutter_test:

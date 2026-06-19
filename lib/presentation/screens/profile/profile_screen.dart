@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_providers.dart';
-import '../../providers/data_providers.dart';
 import '../../providers/repository_providers.dart';
 import '../../widgets/loading_view.dart';
 
@@ -54,7 +52,7 @@ class ProfileScreen extends ConsumerWidget {
       appBar: _buildAppBar(context),
       body: ListView(
         children: [
-          // ── Green banner (matches MaterialsScreen) ───────────────────
+          // ── Profile Banner ───────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: profileAsync.when(
@@ -79,14 +77,12 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
 
-          // ── Unlock CTA ───────────────────────────────────────────────
           if (!hasPaid)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: _UnlockTile(onTap: () => context.push('/unlock')),
             ),
 
-          // ── Account Info ─────────────────────────────────────────────
           _SectionLabel(text: 'ACCOUNT INFO'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -137,7 +133,6 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
 
-          // ── Actions ──────────────────────────────────────────────────
           _SectionLabel(text: 'ACTIONS'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -160,8 +155,8 @@ class ProfileScreen extends ConsumerWidget {
                   iconColor: Colors.redAccent,
                   title: 'DELETE ACCOUNT',
                   titleColor: Colors.redAccent,
-                  subtitle: 'Send an email request to remove your data',
-                  onTap: () => _requestDeletion(context),
+                  subtitle: 'Permanently remove your data',
+                  onTap: () => _showDeleteConfirmation(context, ref, user.id),
                 ),
               ],
             ),
@@ -194,36 +189,79 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _requestDeletion(BuildContext context) async {
-    final uri = Uri.parse(
-      'mailto:masomo@darasahub.com'
-          '?subject=Account%20Deletion%20Request'
-          '&body=Please%20delete%20my%20account%20and%20all%20associated%20data.',
-    );
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Could not open email app. Contact masomo@darasahub.com directly.'),
-            behavior: SnackBarBehavior.floating,
+  Future<void> _showDeleteConfirmation(BuildContext context, WidgetRef ref, String userId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Account?'),
+        content: const Text(
+          'This will permanently delete your account, your progress, and all associated data. This action cannot be undone.',
+          style: TextStyle(height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCEL'),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('DELETE PERMANENTLY'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        // Show a non-dismissible loading dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => const Center(child: CircularProgressIndicator()),
         );
+
+        await ref.read(authRepositoryProvider).deleteAccount(userId);
+
+        if (context.mounted) {
+          // Close loading dialog
+          Navigator.pop(context);
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Your account has been deleted.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          context.go('/auth');
+        }
+      } catch (e) {
+        if (context.mounted) {
+          // Close loading dialog
+          Navigator.pop(context);
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString()),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     }
   }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+|@'));
+    if (parts.isEmpty || parts[0].isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+  }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+|@'));
-  if (parts.isEmpty || parts[0].isEmpty) return '?';
-  if (parts.length == 1) return parts[0][0].toUpperCase();
-  return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-}
-
-// ── Banner ─────────────────────────────────────────────────────────────────
+// ── Shared UI Widgets ──────────────────────────────────────────────────────
 
 class _ProfileBanner extends StatelessWidget {
   const _ProfileBanner({
@@ -248,7 +286,6 @@ class _ProfileBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Initials avatar
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -295,8 +332,6 @@ class _ProfileBanner extends StatelessWidget {
   }
 }
 
-// ── Unlock tile ────────────────────────────────────────────────────────────
-
 class _UnlockTile extends StatelessWidget {
   const _UnlockTile({required this.onTap});
   final VoidCallback onTap;
@@ -340,7 +375,7 @@ class _UnlockTile extends StatelessWidget {
                   ),
                   SizedBox(height: 2),
                   Text(
-                    'Pay once via M-Pesa — practise unlimited',
+                    'Practise unlimited',
                     style: TextStyle(color: Color(0xFFB45309), fontSize: 11),
                   ),
                 ],
@@ -353,8 +388,6 @@ class _UnlockTile extends StatelessWidget {
     );
   }
 }
-
-// ── Section label ──────────────────────────────────────────────────────────
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.text});
@@ -376,8 +409,6 @@ class _SectionLabel extends StatelessWidget {
     );
   }
 }
-
-// ── Info tile ──────────────────────────────────────────────────────────────
 
 class _InfoTile extends StatelessWidget {
   const _InfoTile({
@@ -441,8 +472,6 @@ class _InfoTile extends StatelessWidget {
     );
   }
 }
-
-// ── Action tile ────────────────────────────────────────────────────────────
 
 class _ActionTile extends StatelessWidget {
   const _ActionTile({
@@ -517,8 +546,6 @@ class _ActionTile extends StatelessWidget {
     );
   }
 }
-
-// ── Status badge ───────────────────────────────────────────────────────────
 
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge(

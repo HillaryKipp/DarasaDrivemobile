@@ -637,7 +637,7 @@ class _SignInForm extends StatelessWidget {
       children: [
         _InfoChip(
           icon: Icons.info_outline,
-          text: 'Sign in after verifying your email. M-Pesa payment required if you have not unlocked yet.',
+          text: 'Sign in after verifying your email.',
         ),
         const SizedBox(height: 20),
         TextField(
@@ -743,7 +743,7 @@ class _SignUpForm extends StatelessWidget {
       children: [
         _InfoChip(
           icon: Icons.verified_user_outlined,
-          text: 'Register. There is a one-time fee payable via M-Pesa after sign-up.',
+          text: 'Register.',
         ),
         const SizedBox(height: 20),
         TextField(
@@ -771,14 +771,14 @@ class _SignUpForm extends StatelessWidget {
           keyboardType: TextInputType.phone,
           textInputAction: TextInputAction.next,
           decoration: _fieldDecor(
-              label: 'M-Pesa phone number',
+              label: 'Your phone number',
               hint: '2547XXXXXXXX',
               icon: Icons.phone_outlined),
         ),
         const Padding(
           padding: EdgeInsets.only(left: 4, top: 4),
           child: Text(
-            'Used for M-Pesa payment only. Format: 2547XXXXXXXX',
+            'Format: 2547XXXXXXXX',
             style: TextStyle(color: AppColors.textMuted, fontSize: 11),
           ),
         ),

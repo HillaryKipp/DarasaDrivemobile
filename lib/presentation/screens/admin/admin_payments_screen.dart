@@ -26,7 +26,7 @@ class AdminPaymentsScreen extends ConsumerWidget {
           children: [
             AdminBanner(
               icon: Icons.payments_outlined,
-              title: 'M-Pesa Payments',
+              title: 'Payments',
               subtitle: '${payments.length} transaction${payments.length == 1 ? '' : 's'} recorded',
               trailingIcon: Icons.receipt_long_outlined,
             ),

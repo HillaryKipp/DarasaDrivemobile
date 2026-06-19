@@ -96,24 +96,20 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> resetPassword(String email) async {
-    print('--- BACKEND CALL: ResetPassword for $email ---');
     developer.log('ResetPassword for $email', name: 'AuthRepo');
     try {
       await _client.auth.resetPasswordForEmail(
         email,
         redirectTo: 'darasadrive://login-callback',
       );
-      print('--- BACKEND SUCCESS: ResetPassword email sent to $email ---');
       developer.log('ResetPassword email sent', name: 'AuthRepo');
     } on AuthException catch (e) {
-      print('--- BACKEND ERROR: ResetPassword failed. Status: ${e.statusCode}, Message: ${e.message} ---');
       developer.log(
         'ResetPassword AuthException status=${e.statusCode} message=${e.message}',
         name: 'AuthRepo',
       );
       throw AppException(_mapAuthError(e));
     } catch (e) {
-      print('--- BACKEND ERROR: ResetPassword unexpected error: $e ---');
       developer.log('ResetPassword error: $e', name: 'AuthRepo');
       throw AppException('Failed to send reset link. Please try again.');
     }
@@ -156,6 +152,64 @@ class AuthRepositoryImpl implements AuthRepository {
           }
           return profileFromJson(Map<String, dynamic>.from(rows.first));
         });
+  }
+
+  @override
+  Future<void> markAsPaid(String userId, {String? transactionId, double? amount}) async {
+    developer.log('markAsPaid: START userId=$userId txId=$transactionId', name: 'AuthRepo');
+    
+    // 1. Update Profile has_paid status (Essential)
+    try {
+      await _client
+          .from('profiles')
+          .update({'has_paid': true})
+          .eq('id', userId)
+          .select() 
+          .single()
+          .timeout(const Duration(seconds: 20));
+      developer.log('markAsPaid: Profile update SUCCESS', name: 'AuthRepo');
+    } catch (e) {
+      developer.log('markAsPaid: Profile update ERROR: $e', name: 'AuthRepo');
+      // This failure prevents the app from unlocking. Throw to show error.
+      throw AppException('Failed to update account status. (Error: $e)');
+    }
+
+    // 2. Log the Payment Record (Non-fatal record keeping)
+    if (transactionId != null) {
+      try {
+        developer.log('markAsPaid: Inserting payment log...', name: 'AuthRepo');
+        await _client.from('payments').insert({
+          'user_id': userId,
+          'amount': amount?.toInt() ?? 500,
+          'purpose': 'account_unlock',
+          'checkout_request_id': transactionId, 
+          'mpesa_receipt': transactionId,      
+          'transaction_id': transactionId, // Requires the SQL fix above
+          'status': 'completed',
+        }).timeout(const Duration(seconds: 15));
+        developer.log('markAsPaid: Payment log SUCCESS', name: 'AuthRepo');
+      } catch (e) {
+        developer.log('markAsPaid: Payment log ERROR (Ignoring): $e', name: 'AuthRepo');
+        // We don't throw because the profile was already updated successfully.
+      }
+    }
+    
+    developer.log('markAsPaid: FINISHED', name: 'AuthRepo');
+  }
+
+  @override
+  Future<void> deleteAccount(String userId) async {
+    developer.log('Deleting account for: $userId', name: 'AuthRepo');
+    try {
+      // Calls the SECURITY DEFINER function to delete auth.users
+      await _client.rpc('delete_user');
+      // Sign out to clear the local app session
+      await signOut();
+      developer.log('Account deletion success', name: 'AuthRepo');
+    } catch (e) {
+      developer.log('Error deleting account: $e', name: 'AuthRepo');
+      throw AppException('Failed to delete account. (Error: $e)');
+    }
   }
 
   String _mapAuthError(AuthException e) {

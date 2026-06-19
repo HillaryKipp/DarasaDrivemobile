@@ -21,4 +21,10 @@ abstract class AuthRepository {
   Stream<UserProfile> watchProfile(String userId);
 
   Future<void> resetPassword(String email);
+
+  /// Updates the user's profile to reflect they have paid.
+  Future<void> markAsPaid(String userId, {String? transactionId, double? amount});
+
+  /// Permanently deletes the user's account and data.
+  Future<void> deleteAccount(String userId);
 }

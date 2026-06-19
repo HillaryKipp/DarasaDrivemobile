@@ -62,7 +62,7 @@ class AdminDashboardScreen extends StatelessWidget {
                 AdminModuleCard(
                   icon: Icons.payments_outlined,
                   title: 'Payments',
-                  subtitle: 'M-Pesa transactions',
+                  subtitle: 'Transactions',
                   onTap: () => context.push('/admin/payments'),
                 ),
               ],

@@ -27,3 +27,6 @@ final isAdminProvider = FutureProvider<bool>((ref) async {
   if (user == null) return false;
   return ref.watch(authRepositoryProvider).isAdmin(user.id);
 });
+
+/// Tracks if the user has dismissed the unlock screen for the current session.
+final unlockSkippedProvider = StateProvider<bool>((ref) => false);

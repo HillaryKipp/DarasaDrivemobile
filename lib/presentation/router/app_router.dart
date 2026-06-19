@@ -36,6 +36,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
   final isAdminAsync = ref.watch(isAdminProvider);
   final hasPaid = ref.watch(hasPaidProvider);
+  final unlockSkipped = ref.watch(unlockSkippedProvider);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -56,7 +57,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final onAuth = location == '/auth';
       final onUnlock = location == '/unlock';
       final onProfile = location == '/profile';
+      final onHome = location == '/home';
+      final onSupport = location == '/support';
       final onResetPassword = location == '/reset-password';
+      final onLoginCallback = location == '/login-callback';
       final onAdmin = location.startsWith('/admin');
 
       if (onAdmin) {
@@ -69,20 +73,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return '/auth';
       }
 
-      // Signed-in but unpaid: prompt payment before using the app.
+      // Signed-in but unpaid:
       final isAdmin = isAdminAsync.valueOrNull ?? false;
-      if (user != null &&
-          !hasPaid &&
-          !isAdmin &&
-          !onUnlock &&
-          !onAuth &&
-          !onProfile &&
-          !onAdmin &&
-          !onResetPassword) {
-        return '/unlock?from=${Uri.encodeComponent(state.uri.toString())}';
+      if (user != null && !hasPaid && !isAdmin) {
+        // If they haven't skipped yet, force them to Unlock first.
+        if (!unlockSkipped && !onUnlock && !onAuth && !onLoginCallback && !onResetPassword && !onAdmin) {
+          return '/unlock?from=${Uri.encodeComponent(state.uri.toString())}';
+        }
+
+        // If they DID skip, only block premium sections.
+        if (unlockSkipped) {
+          final isPremiumSection = !onHome && !onSupport && !onProfile && !onUnlock && !onAdmin && !onAuth && !onResetPassword && !onLoginCallback;
+          if (isPremiumSection) {
+            return '/unlock?from=${Uri.encodeComponent(state.uri.toString())}';
+          }
+        }
       }
 
-      if (user != null && onAuth) {
+      if (user != null && (onAuth || onLoginCallback)) {
         if (isAdmin || hasPaid) return '/home';
         return '/unlock';
       }
@@ -100,6 +108,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             prefillPhone: args?.prefillPhone ?? state.uri.queryParameters['phone'],
           );
         },
+      ),
+      GoRoute(
+        path: '/login-callback',
+        builder: (context, state) => const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
       ),
       GoRoute(
         path: '/reset-password',
