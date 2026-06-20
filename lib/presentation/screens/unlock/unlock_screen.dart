@@ -49,6 +49,10 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     await ref.read(iapStateNotifierProvider.notifier).buyUnlock(product);
   }
 
+  Future<void> _onRestore() async {
+    await ref.read(iapStateNotifierProvider.notifier).restorePurchases();
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
@@ -67,6 +71,11 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
             content: Text('Store error: $err'),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () => ref.read(iapStateNotifierProvider.notifier).reset(),
+            ),
           ),
         );
       });
@@ -86,6 +95,13 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
             onPressed: _skipUnlock,
             tooltip: 'Continue for free',
           ),
+          actions: [
+            if (isLoggedIn)
+              TextButton(
+                onPressed: busy ? null : _onRestore,
+                child: const Text('RESTORE', style: TextStyle(color: Colors.white)),
+              ),
+          ],
         ),
         body: Stack(
           children: [
@@ -246,6 +262,17 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                                       textAlign: TextAlign.center,
                                       style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                                     ),
+                                    const SizedBox(height: 16),
+                                    OutlinedButton(
+                                      onPressed: busy ? null : _onRestore,
+                                      child: const Text('Restore Purchase'),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'Already paid but account not unlocked? Tap Restore.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: AppColors.textMuted, fontSize: 10),
+                                    ),
                                   ],
                                 );
                               },
@@ -279,7 +306,25 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
               Positioned.fill(
                 child: Container(
                   color: Colors.black.withValues(alpha: 0.5),
-                  child: const LoadingView(message: 'Processing your request…'),
+                  child: Stack(
+                    children: [
+                      const LoadingView(message: 'Processing your request…'),
+                      Positioned(
+                        bottom: 40,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: TextButton(
+                            onPressed: () => ref.read(iapStateNotifierProvider.notifier).reset(),
+                            child: const Text(
+                              'Cancel Waiting',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
           ],

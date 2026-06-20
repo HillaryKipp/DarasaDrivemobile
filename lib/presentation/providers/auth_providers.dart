@@ -12,10 +12,14 @@ final currentUserProvider = Provider<User?>((ref) {
   return ref.watch(authStateProvider).valueOrNull?.session?.user;
 });
 
-final userProfileProvider = FutureProvider<UserProfile?>((ref) async {
+/// Watches the user's profile in real-time from Supabase.
+final userProfileProvider = StreamProvider<UserProfile?>((ref) {
   final user = ref.watch(currentUserProvider);
-  if (user == null) return null;
-  return ref.watch(authRepositoryProvider).getProfile(user.id);
+  if (user == null) return Stream.value(null);
+  
+  // Using watchProfile (Stream) instead of getProfile (Future) so UI updates 
+  // immediately when the database 'has_paid' field changes.
+  return ref.watch(authRepositoryProvider).watchProfile(user.id);
 });
 
 final hasPaidProvider = Provider<bool>((ref) {
