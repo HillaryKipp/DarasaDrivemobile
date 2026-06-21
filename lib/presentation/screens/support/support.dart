@@ -141,7 +141,7 @@ class SupportTab extends StatelessWidget {
                     _FaqTile(
                       question: 'How many times can I take a practice test?',
                       answer:
-                      'Unlimited. You can retake any of the 19 units as many times as you need. We recommend revisiting units where your score is below 80%.',
+                      'Unlimited. You can retake any of the units as many times as you need. We recommend revisiting units where your score is below 80%.',
                     ),
                     _FaqTile(
                       question: 'I forgot my password. How do I reset it?',
@@ -177,7 +177,7 @@ class SupportTab extends StatelessWidget {
                       iconColor: Colors.redAccent,
                       iconBg: const Color(0xFFFFF1F1),
                       title: 'Delete My Account',
-                      subtitle: 'Request permanent account & data deletion',
+                      subtitle: 'Log in to your account and delete on the profile tab or Request permanent account & data deletion',
                       action: 'Request',
                       onTap: () => _launchUrl(
                           'mailto:masomo@darasahub.com?subject=Account%20Deletion%20Request&body=Please%20delete%20my%20account%20and%20all%20associated%20data.'),

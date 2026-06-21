@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/question.dart';
@@ -45,13 +46,31 @@ class UnitsRepositoryImpl implements UnitsRepository {
     required int total,
     required List<String> wrongQuestionIds,
   }) async {
-    await _client.from('test_attempts').insert({
-      'user_id': userId,
-      'unit_id': unitId,
-      'score': score,
-      'total': total,
-      'wrong_question_ids': wrongQuestionIds,
-    });
+    try {
+      debugPrint('--- DB SAVE START: Unit=$unitId Score=$score ---');
+      
+      // Upsert: Updates existing row if user_id+unit_id matches, else inserts.
+      final response = await _client.from('test_attempts').upsert({
+        'user_id': userId,
+        'unit_id': unitId,
+        'score': score,
+        'total': total,
+        'wrong_question_ids': wrongQuestionIds,
+        'completed_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'user_id,unit_id').select();
+      
+      if (response.isEmpty) {
+        debugPrint('--- DB WARNING: Save returned no data. Check if your RLS Policy allows UPDATE! ---');
+      } else {
+        debugPrint('--- DB SUCCESS: Row updated in database ---');
+      }
+    } on PostgrestException catch (e) {
+      debugPrint('--- DB ERROR: ${e.message} (Code: ${e.code}) ---');
+      rethrow;
+    } catch (e) {
+      debugPrint('--- DB CRITICAL ERROR: $e ---');
+      rethrow;
+    }
   }
 
   @override

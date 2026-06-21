@@ -29,6 +29,7 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
   final Map<String, String> _answers = {};
   bool _submitted = false;
   List<Question>? _shuffled;
+  bool _saving = false;
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +89,6 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
             ),
           ),
           data: (questions) {
-            // Persist the shuffled order so it doesn't change on every rebuild
             _shuffled ??= [...questions]..shuffle();
             final shuffled = _shuffled!;
 
@@ -116,11 +116,12 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                 unitTitle: unit.title,
                 questions: shuffled,
                 answers: _answers,
+                saving: _saving,
                 onRetry: () => setState(() {
                   _index = 0;
                   _answers.clear();
                   _submitted = false;
-                  _shuffled = null; // Clear shuffled order to get a new one on retry
+                  _shuffled = null;
                   ref.invalidate(questionsProvider(widget.unitId));
                 }),
                 onBack: () => context.go('/tests'),
@@ -141,14 +142,12 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
               body: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Progress bar ────────────────────────────────────────
                   LinearProgressIndicator(
                     value: progress,
                     minHeight: 6,
                     backgroundColor: Colors.grey.shade200,
                     color: AppColors.primary,
                   ),
-                  // ── Scrollable question area ─────────────────────────────
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(20),
@@ -167,7 +166,6 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          // ── Diagram / image (only when present) ───────────
                           if (current.imageUrl != null &&
                               current.imageUrl!.isNotEmpty) ...[
                             const SizedBox(height: 16),
@@ -176,25 +174,6 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                               child: Image.network(
                                 current.imageUrl!,
                                 fit: BoxFit.contain,
-                                loadingBuilder: (context, child, progress) {
-                                  if (progress == null) return child;
-                                  return Container(
-                                    height: 180,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Center(
-                                      child: CircularProgressIndicator(
-                                        value: progress.expectedTotalBytes != null
-                                            ? progress.cumulativeBytesLoaded /
-                                            progress.expectedTotalBytes!
-                                            : null,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  );
-                                },
                                 errorBuilder: (context, error, stack) =>
                                     Container(
                                       height: 120,
@@ -202,26 +181,13 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                                         color: Colors.grey.shade100,
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      child: const Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.broken_image_outlined,
-                                                size: 36, color: Colors.grey),
-                                            SizedBox(height: 6),
-                                            Text(
-                                              'Image could not be loaded',
-                                              style: TextStyle(color: Colors.grey),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                                      child: const Icon(Icons.broken_image_outlined,
+                                          size: 36, color: Colors.grey),
                                     ),
                               ),
                             ),
                           ],
                           const SizedBox(height: 20),
-                          // ── Answer options ──────────────────────────────
                           for (final entry in current.options.entries)
                             _OptionTile(
                               label: entry.key,
@@ -235,7 +201,6 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
                       ),
                     ),
                   ),
-                  // ── Navigation bar ──────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Row(
@@ -279,7 +244,10 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
   }
 
   Future<void> _submit(List<Question> questions) async {
-    setState(() => _submitted = true);
+    setState(() {
+      _submitted = true;
+      _saving = true;
+    });
 
     var score = 0;
     final wrongIds = <String>[];
@@ -291,23 +259,30 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
       }
     }
 
-    final user = ref.read(currentUserProvider);
-    if (user != null) {
-      await ref.read(unitsRepositoryProvider).saveTestAttempt(
-        userId: user.id,
-        unitId: widget.unitId,
-        score: score,
-        total: questions.length,
-        wrongQuestionIds: wrongIds,
-      );
-      ref.invalidate(testAttemptsProvider);
+    try {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await ref.read(unitsRepositoryProvider).saveTestAttempt(
+          userId: user.id,
+          unitId: widget.unitId,
+          score: score,
+          total: questions.length,
+          wrongQuestionIds: wrongIds,
+        );
+        // Refresh local cache
+        ref.invalidate(testAttemptsProvider);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save latest score: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Option tile
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _OptionTile extends StatelessWidget {
   const _OptionTile({
@@ -326,7 +301,7 @@ class _OptionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      color: selected ? AppColors.primary.withValues(alpha: 0.08) : null,
+      color: selected ? AppColors.primary.withOpacity(0.08) : null,
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor:
@@ -341,10 +316,6 @@ class _OptionTile extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Results view
-// ─────────────────────────────────────────────────────────────────────────────
-
 class _ResultsView extends StatelessWidget {
   const _ResultsView({
     required this.unitTitle,
@@ -352,6 +323,7 @@ class _ResultsView extends StatelessWidget {
     required this.answers,
     required this.onRetry,
     required this.onBack,
+    required this.saving,
   });
 
   final String unitTitle;
@@ -359,17 +331,13 @@ class _ResultsView extends StatelessWidget {
   final Map<String, String> answers;
   final VoidCallback onRetry;
   final VoidCallback onBack;
+  final bool saving;
 
   @override
   Widget build(BuildContext context) {
     var score = 0;
-    final wrong = <Question>[];
     for (final q in questions) {
-      if (answers[q.id] == q.correctOption) {
-        score++;
-      } else {
-        wrong.add(q);
-      }
+      if (answers[q.id] == q.correctOption) score++;
     }
     final pct = ((score / questions.length) * 100).round();
     final passed = pct >= 70;
@@ -379,7 +347,6 @@ class _ResultsView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // ── Score card ─────────────────────────────────────────────────
           Card(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -400,10 +367,21 @@ class _ResultsView extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '$pct% — ${passed ? "Great work, you passed!" : "Keep practising — you\'ll get there."}',
+                    '$pct% — ${passed ? "Great work, you passed!" : "Keep practising!"}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textMuted),
                   ),
+                  if (saving) ...[
+                    const SizedBox(height: 16),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                        SizedBox(width: 8),
+                        Text('Syncing score...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   Row(
                     children: [
@@ -426,56 +404,6 @@ class _ResultsView extends StatelessWidget {
               ),
             ),
           ),
-          // ── Wrong answers review ────────────────────────────────────────
-          if (wrong.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            const Text(
-              'Questions you got wrong',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            for (final q in wrong)
-              Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        q.questionText,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      // Show image in review if the question had one
-                      if (q.imageUrl != null && q.imageUrl!.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            q.imageUrl!,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      Text(
-                        'Correct: ${q.correctOption} — ${q.optionLabel(q.correctOption)}',
-                        style: const TextStyle(color: AppColors.primary),
-                      ),
-                      if (q.explanation != null &&
-                          q.explanation!.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          q.explanation!,
-                          style: const TextStyle(color: AppColors.textMuted),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-          ],
         ],
       ),
     );

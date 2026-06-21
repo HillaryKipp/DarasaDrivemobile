@@ -22,5 +22,5 @@ class TestAttempt extends Equatable {
   int get percentage => total == 0 ? 0 : ((score / total) * 100).round();
 
   @override
-  List<Object?> get props => [id];
+  List<Object?> get props => [id, unitId, score, total, completedAt];
 }

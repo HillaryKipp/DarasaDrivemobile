@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../domain/entities/test_attempt.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/error_view.dart';
 import '../../widgets/loading_view.dart';
@@ -13,6 +15,7 @@ class StatisticsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final attemptsAsync = ref.watch(testAttemptsProvider);
+    final unitsAsync = ref.watch(unitsProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF9),
@@ -21,7 +24,7 @@ class StatisticsScreen extends ConsumerWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.chevron_left, color: Colors.black, size: 28),
-          onPressed: () => Navigator.of(context).maybePop(),
+          onPressed: () => context.pop(),
         ),
         title: const Text(
           'STATISTICS',
@@ -35,194 +38,352 @@ class StatisticsScreen extends ConsumerWidget {
         centerTitle: true,
       ),
       body: attemptsAsync.when(
+        // Force the UI to show a loader during a refresh so the user knows data is updating
+        skipLoadingOnRefresh: false, 
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
           message: e.toString(),
           onRetry: () => ref.invalidate(testAttemptsProvider),
         ),
         data: (attempts) {
-          // Calculate stats
-          final avgPct = attempts.isEmpty
-              ? 0
-              : (attempts.map((a) => a.percentage).reduce((a, b) => a + b) /
-                      attempts.length)
-                  .round();
-          
-          final unitsCompleted = attempts.length; // Simplified for mock
-          final totalQuestions = attempts.isEmpty ? 0 : attempts.map((a) => a.total).reduce((a, b) => a + b);
-          final correctAnswers = attempts.isEmpty ? 0 : attempts.map((a) => a.score).reduce((a, b) => a + b);
+          return unitsAsync.when(
+            skipLoadingOnRefresh: false,
+            loading: () => const LoadingView(),
+            error: (e, _) => ErrorView(
+              message: e.toString(),
+              onRetry: () => ref.invalidate(unitsProvider),
+            ),
+            data: (units) {
+              // ── 1. Map LATEST attempt for each unit ──────────────────────
+              final latestAttemptsMap = <String, TestAttempt>{};
+              final sortedAttempts = [...attempts]
+                ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
+              
+              for (final a in sortedAttempts) {
+                if (!latestAttemptsMap.containsKey(a.unitId)) {
+                  latestAttemptsMap[a.unitId] = a;
+                }
+              }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // Overall Performance Section
-              const _SectionHeader(title: 'Overall Performance'),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
+              // ── 2. Summary Statistics (Calculated strictly from Latest) ──
+              final totalUnitsCount = units.length;
+              final unitsDoneCount = latestAttemptsMap.length;
+              
+              int totalQuestionsDone = 0;
+              int totalCorrectDone = 0;
+              int sumPercentages = 0;
+              
+              for (final attempt in latestAttemptsMap.values) {
+                totalQuestionsDone += attempt.total;
+                totalCorrectDone += attempt.score;
+                sumPercentages += attempt.percentage;
+              }
+              
+              final avgPct = unitsDoneCount == 0 ? 0 : (sumPercentages / unitsDoneCount).round();
+              final sortedUnits = [...units]..sort((a, b) => a.unitNumber.compareTo(b.unitNumber));
+
+              return RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(testAttemptsProvider);
+                  ref.invalidate(unitsProvider);
+                },
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
                   children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          height: 100,
-                          width: 100,
-                          child: CircularProgressIndicator(
-                            value: avgPct / 100,
-                            strokeWidth: 10,
-                            backgroundColor: const Color(0xFFF1F5F9),
-                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF065F2F)),
-                          ),
-                        ),
-                        Text(
-                          '$avgPct%',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      child: Column(
+                    const _SectionHeader(title: 'Overall Performance'),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
                         children: [
-                          _StatRow(label: 'Units Completed', value: '$unitsCompleted / 19'),
-                          const Divider(height: 16),
-                          _StatRow(label: 'Questions Attempted', value: '$totalQuestions'),
-                          const Divider(height: 16),
-                          _StatRow(label: 'Correct Answers', value: '$correctAnswers'),
-                          const Divider(height: 16),
-                          _StatRow(label: 'Average Score', value: '$avgPct%'),
+                          _ProgressCircle(percentage: avgPct),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                _StatRow(label: 'Units Done', value: '$unitsDoneCount / $totalUnitsCount'),
+                                const Divider(height: 16),
+                                _StatRow(label: 'Questions Done', value: '$totalQuestionsDone'),
+                                const Divider(height: 16),
+                                _StatRow(label: 'Correct Answers', value: '$totalCorrectDone'),
+                                const Divider(height: 16),
+                                _StatRow(label: 'Avg Score (Latest)', value: '$avgPct%'),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-              // Performance by Unit Section
-              const _SectionHeader(title: 'Performance by Unit'),
-              Container(
-                height: 220,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF065F2F),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Text('Score (%)', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: List.generate(10, (index) {
-                          // Mock bar heights
-                          final scores = [94, 88, 82, 65, 65, 68, 65, 65, 65, 62];
-                          final score = scores[index];
-                          final isHigh = score > 70;
-                          
-                          return Column(
+                    const _SectionHeader(title: 'Latest Performance by Unit'),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              Container(
-                                width: 18,
-                                height: (score / 100) * 120,
-                                decoration: BoxDecoration(
-                                  color: isHigh ? const Color(0xFF065F2F) : const Color(0xFFE2E8F0),
-                                  borderRadius: BorderRadius.circular(4),
+                              _LegendItem(color: Color(0xFF065F2F), label: 'Passed (70%+)'),
+                              SizedBox(width: 12),
+                              _LegendItem(color: Colors.orange, label: 'Attempted'),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 160,
+                            child: sortedUnits.isEmpty 
+                              ? const Center(child: Text('No units found'))
+                              : SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: sortedUnits.map((unit) {
+                                    final score = latestAttemptsMap[unit.id]?.percentage ?? 0;
+                                    return _BarChartItem(
+                                      score: score,
+                                      label: 'U${unit.unitNumber}',
+                                    );
+                                  }).toList(),
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Text('${index + 1}', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                            ],
-                          );
-                        }),
+                          ),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 24),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const _SectionHeader(title: 'Recent Unit Tests'),
+                        _ResponsiveViewAllButton(onTap: () => context.go('/tests')),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _RecentAttemptsList(attempts: attempts), 
+                    const SizedBox(height: 32),
                   ],
                 ),
-              ),
-              const SizedBox(height: 24),
-
-              // Recent Mock Tests Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const _SectionHeader(title: 'Recent Unit Tests'),
-                  TextButton(
-                    onPressed: () {},
-                    child: const Text('View All', style: TextStyle(color: Color(0xFF065F2F), fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Column(
-                  children: attempts.take(3).map((attempt) {
-                    final isLast = attempts.indexOf(attempt) == 2 || attempts.indexOf(attempt) == attempts.length - 1;
-                    return Column(
-                      children: [
-                        ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                          title: Text(
-                            attempt.unitTitle ?? 'Mock Test - Unit ${attempt.unitNumber}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                          ),
-                          subtitle: Text(
-                            DateFormat('MMMM d, y').format(attempt.completedAt),
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                          ),
-                          trailing: Text(
-                            '${attempt.percentage}%',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: attempt.percentage >= 70 
-                                  ? const Color(0xFF059669) 
-                                  : (attempt.percentage >= 50 ? Colors.orange : Colors.red),
-                            ),
-                          ),
-                        ),
-                        if (!isLast) const Divider(height: 1, indent: 20, endIndent: 20),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 30),
-            ],
+              );
+            },
           );
         },
       ),
+    );
+  }
+}
+
+class _ProgressCircle extends StatelessWidget {
+  final int percentage;
+  const _ProgressCircle({required this.percentage});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        SizedBox(
+          height: 90,
+          width: 90,
+          child: CircularProgressIndicator(
+            value: percentage / 100,
+            strokeWidth: 10,
+            backgroundColor: const Color(0xFFF1F5F9),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF065F2F)),
+          ),
+        ),
+        Text(
+          '$percentage%',
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+      ],
+    );
+  }
+}
+
+class _BarChartItem extends StatelessWidget {
+  final int score;
+  final String label;
+  const _BarChartItem({required this.score, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final isPassed = score >= 70;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (score > 0)
+            Text('$score', style: const TextStyle(fontSize: 8, color: AppColors.textMuted)),
+          const SizedBox(height: 4),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            width: 16,
+            height: (score / 100) * 110 + 2, // 2px min visible base
+            decoration: BoxDecoration(
+              color: score == 0 
+                  ? const Color(0xFFF1F5F9) 
+                  : (isPassed ? const Color(0xFF065F2F) : Colors.orange),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontSize: 9, color: AppColors.textMuted)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResponsiveViewAllButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ResponsiveViewAllButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF065F2F).withOpacity(0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF065F2F).withOpacity(0.1)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'View All',
+                style: TextStyle(
+                  color: Color(0xFF065F2F),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+              SizedBox(width: 6),
+              Icon(Icons.arrow_forward_ios, size: 10, color: Color(0xFF065F2F)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentAttemptsList extends StatelessWidget {
+  final List<dynamic> attempts;
+  const _RecentAttemptsList({required this.attempts});
+
+  @override
+  Widget build(BuildContext context) {
+    if (attempts.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text('No test history available', style: TextStyle(color: AppColors.textMuted)),
+        ),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: attempts.take(5).map((attempt) {
+          final index = attempts.indexOf(attempt);
+          final isLast = index == attempts.length - 1 || index == 4;
+          return Column(
+            children: [
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                title: Text(
+                  attempt.unitTitle ?? 'Unit ${attempt.unitNumber} Test',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                ),
+                subtitle: Text(
+                  DateFormat('MMM d, y • HH:mm').format(attempt.completedAt),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                trailing: _AttemptScore(percentage: attempt.percentage, score: '${attempt.score}/${attempt.total}'),
+                onTap: () => context.go('/tests/${attempt.unitId}'),
+              ),
+              if (!isLast) const Divider(height: 1, indent: 20, endIndent: 20),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _AttemptScore extends StatelessWidget {
+  final int percentage;
+  final String score;
+  const _AttemptScore({required this.percentage, required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          '$percentage%',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: percentage >= 70 
+                ? const Color(0xFF059669) 
+                : (percentage >= 50 ? Colors.orange : Colors.red),
+          ),
+        ),
+        Text(score, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+      ],
     );
   }
 }
@@ -234,7 +395,7 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
       child: Text(
         title,
         style: const TextStyle(

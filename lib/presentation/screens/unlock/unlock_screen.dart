@@ -95,13 +95,6 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
             onPressed: _skipUnlock,
             tooltip: 'Continue for free',
           ),
-          actions: [
-            if (isLoggedIn)
-              TextButton(
-                onPressed: busy ? null : _onRestore,
-                child: const Text('RESTORE', style: TextStyle(color: Colors.white)),
-              ),
-          ],
         ),
         body: Stack(
           children: [

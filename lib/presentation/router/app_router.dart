@@ -36,7 +36,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
   final isAdminAsync = ref.watch(isAdminProvider);
   final hasPaid = ref.watch(hasPaidProvider);
-  final unlockSkipped = ref.watch(unlockSkippedProvider);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -56,44 +55,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       final onAuth = location == '/auth';
       final onUnlock = location == '/unlock';
-      final onProfile = location == '/profile';
-      final onHome = location == '/home';
-      final onSupport = location == '/support';
       final onResetPassword = location == '/reset-password';
       final onLoginCallback = location == '/login-callback';
       final onAdmin = location.startsWith('/admin');
 
+      // Admin access control
       if (onAdmin) {
         if (user == null) return '/auth';
         if (isAdminAsync.isLoading) return null;
         if (isAdminAsync.valueOrNull != true) return '/home';
       }
 
+      // Guest access control for specific sections
       if (user == null && _requiresAuth(location)) {
         return '/auth';
       }
 
-      // Signed-in but unpaid:
-      final isAdmin = isAdminAsync.valueOrNull ?? false;
-      if (user != null && !hasPaid && !isAdmin) {
-        // If they haven't skipped yet, force them to Unlock first.
-        if (!unlockSkipped && !onUnlock && !onAuth && !onLoginCallback && !onResetPassword && !onAdmin) {
-          return '/unlock?from=${Uri.encodeComponent(state.uri.toString())}';
-        }
-
-        // If they DID skip, only block premium sections.
-        if (unlockSkipped) {
-          final isPremiumSection = !onHome && !onSupport && !onProfile && !onUnlock && !onAdmin && !onAuth && !onResetPassword && !onLoginCallback;
-          if (isPremiumSection) {
-            return '/unlock?from=${Uri.encodeComponent(state.uri.toString())}';
-          }
-        }
-      }
-
+      // If user is already logged in and paid, don't let them stay on Auth or Unlock screens
       if (user != null && (onAuth || onLoginCallback)) {
+        final isAdmin = isAdminAsync.valueOrNull ?? false;
         if (isAdmin || hasPaid) return '/home';
-        return '/unlock';
+        // Allow them to proceed to /unlock if they came from Auth
       }
+
       return null;
     },
     routes: [
@@ -264,5 +248,5 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 });
 
 bool _requiresAuth(String location) {
-  return location.startsWith('/stats');
+  return location.startsWith('/stats') || location.startsWith('/profile');
 }

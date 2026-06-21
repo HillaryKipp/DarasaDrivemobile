@@ -9,14 +9,34 @@ import '../../providers/data_providers.dart';
 import '../../widgets/error_view.dart';
 import '../../widgets/loading_view.dart';
 
-class UnitsScreen extends ConsumerWidget {
+class UnitsScreen extends ConsumerStatefulWidget {
   const UnitsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UnitsScreen> createState() => _UnitsScreenState();
+}
+
+class _UnitsScreenState extends ConsumerState<UnitsScreen> {
+  bool _isSearching = false;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onRefresh() async {
+    ref.invalidate(testAttemptsProvider);
+    await ref.read(unitsProvider.future);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final unitsAsync = ref.watch(unitsProvider);
-    final hasPaid = ref.watch(hasPaidProvider);
     final attemptsAsync = ref.watch(testAttemptsProvider);
+    final hasPaid = ref.watch(hasPaidProvider);
 
     return DefaultTabController(
       length: 2,
@@ -29,212 +49,258 @@ class UnitsScreen extends ConsumerWidget {
             icon: const Icon(Icons.chevron_left, color: Colors.black, size: 28),
             onPressed: () => context.pop(),
           ),
-          title: const Text(
-            'TESTS',
-            style: TextStyle(
-              color: Color(0xFF065F2F),
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              letterSpacing: 1.1,
-            ),
-          ),
+          title: _isSearching
+              ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Search units...',
+                    border: InputBorder.none,
+                    hintStyle: TextStyle(color: Colors.grey),
+                  ),
+                  style: const TextStyle(color: Colors.black, fontSize: 16),
+                  onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase()),
+                )
+              : const Text(
+                  'TESTS',
+                  style: TextStyle(
+                    color: Color(0xFF065F2F),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    letterSpacing: 1.1,
+                  ),
+                ),
           centerTitle: true,
           actions: [
             IconButton(
-              icon: const Icon(Icons.search, color: Colors.black),
-              onPressed: () {},
+              icon: Icon(_isSearching ? Icons.close : Icons.search, color: Colors.black),
+              onPressed: () {
+                setState(() {
+                  if (_isSearching) {
+                    _searchController.clear();
+                    _searchQuery = '';
+                  }
+                  _isSearching = !_isSearching;
+                });
+              },
             ),
+            if (!_isSearching)
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.black),
+                onPressed: _onRefresh,
+                tooltip: 'Refresh results',
+              ),
           ],
         ),
-        body: Column(
-          children: [
-            // Top Course Progress Banner
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF065F2F),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
+        body: unitsAsync.when(
+          loading: () => const LoadingView(),
+          error: (e, _) => ErrorView(
+            message: e.toString(),
+            onRetry: _onRefresh,
+          ),
+          data: (units) {
+            return attemptsAsync.when(
+              loading: () => const LoadingView(),
+              error: (e, _) => ErrorView(
+                message: 'Failed to load test history: $e',
+                onRetry: _onRefresh,
+              ),
+              data: (attempts) {
+                // ── 1. Calculate LATEST score for each unit ──────────────────
+                final latestScoresMap = <String, double>{};
+                final sortedAttempts = [...attempts]
+                  ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
+                
+                for (final a in sortedAttempts) {
+                  if (!latestScoresMap.containsKey(a.unitId)) {
+                    latestScoresMap[a.unitId] = a.total == 0 ? 0.0 : a.score / a.total;
+                  }
+                }
+
+                // ── 2. Calculate overall progress based on latest scores ──────────
+                final sum = latestScoresMap.values.fold(0.0, (a, b) => a + b);
+                final overallProgress = units.isEmpty ? 0.0 : sum / units.length;
+                final overallPct = (overallProgress * 100).round();
+
+                // ── 3. Filtering and Sorting logic ──────────────────────────────
+                final filteredUnits = units.where((u) {
+                  if (_searchQuery.isEmpty) return true;
+                  return u.title.toLowerCase().contains(_searchQuery) ||
+                         u.unitNumber.toString().contains(_searchQuery);
+                }).toList();
+
+                // Sort explicitly by unitNumber ascending (1 to 16)
+                filteredUnits.sort((a, b) => a.unitNumber.compareTo(b.unitNumber));
+
+                final freeUnits = filteredUnits.where((u) => u.isFreePreview).toList();
+                final allUnits = filteredUnits;
+
+                return Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.description, color: Colors.white, size: 30),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Course Progress',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                    // Top Course Progress Banner
+                    if (!_isSearching)
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF065F2F),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          const SizedBox(height: 4),
-                          unitsAsync.when(
-                            data: (units) => Text(
-                              '${units.length} Units • 100+ Questions',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                            loading: () => const Text('Loading...', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                            error: (_, __) => const SizedBox.shrink(),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.description, color: Colors.white, size: 30),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Course Progress',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${units.length} Units • Learning Progress',
+                                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  SizedBox(
+                                    height: 48,
+                                    width: 48,
+                                    child: CircularProgressIndicator(
+                                      value: overallProgress,
+                                      strokeWidth: 4,
+                                      backgroundColor: Colors.white.withOpacity(0.1),
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                  Text(
+                                    '$overallPct%',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    // Tab Bar
+                    const TabBar(
+                      indicatorColor: Color(0xFF065F2F),
+                      labelColor: Color(0xFF065F2F),
+                      unselectedLabelColor: Colors.grey,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      tabs: [
+                        Tab(text: 'Free Units'),
+                        Tab(text: 'All Units'),
+                      ],
+                    ),
+                    const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
+
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          // Tab 1: Free Units
+                          RefreshIndicator(
+                            onRefresh: _onRefresh,
+                            child: freeUnits.isEmpty
+                                ? ListView(
+                                    children: [
+                                      SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                                      Center(child: Text(_searchQuery.isEmpty ? 'No free units available' : 'No results found')),
+                                    ],
+                                  )
+                                : ListView.separated(
+                                    padding: const EdgeInsets.all(16),
+                                    physics: const AlwaysScrollableScrollPhysics(),
+                                    itemCount: freeUnits.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                    itemBuilder: (context, index) {
+                                      final unit = freeUnits[index];
+                                      return _UnitListItem(
+                                        unit: unit,
+                                        hasPaid: hasPaid,
+                                        progress: latestScoresMap[unit.id],
+                                        onTap: () => context.go('/tests/${unit.id}'),
+                                      );
+                                    },
+                                  ),
+                          ),
+
+                          // Tab 2: All Units
+                          RefreshIndicator(
+                            onRefresh: _onRefresh,
+                            child: allUnits.isEmpty
+                                ? ListView(
+                                    children: [
+                                      SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                                      const Center(child: Text('No results found')),
+                                    ],
+                                  )
+                                : ListView.separated(
+                                    padding: const EdgeInsets.all(16),
+                                    physics: const AlwaysScrollableScrollPhysics(),
+                                    itemCount: allUnits.length + (hasPaid || _searchQuery.isNotEmpty ? 0 : 1),
+                                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                    itemBuilder: (context, index) {
+                                      if (index == allUnits.length && !hasPaid && _searchQuery.isEmpty) {
+                                        return _UnlockBanner(
+                                          unitCount: units.length,
+                                          onTap: () => context.push(
+                                            '/unlock?from=${Uri.encodeComponent('/tests')}',
+                                          ),
+                                        );
+                                      }
+                                      if (index >= allUnits.length) return const SizedBox.shrink();
+
+                                      final unit = allUnits[index];
+                                      return _UnitListItem(
+                                        unit: unit,
+                                        hasPaid: hasPaid,
+                                        progress: latestScoresMap[unit.id],
+                                        onTap: () {
+                                          final target = '/tests/${unit.id}';
+                                          if (!unit.isAccessible(hasPaid)) {
+                                            context.push('/unlock?from=${Uri.encodeComponent(target)}');
+                                            return;
+                                          }
+                                          context.go(target);
+                                        },
+                                      );
+                                    },
+                                  ),
                           ),
                         ],
                       ),
                     ),
-                    unitsAsync.when(
-                      data: (units) {
-                        if (units.isEmpty) return const SizedBox.shrink();
-                        final attempts = attemptsAsync.valueOrNull ?? [];
-
-                        final bestScores = <String, double>{};
-                        for (final a in attempts) {
-                          final p = a.total == 0 ? 0.0 : a.score / a.total;
-                          if (p > (bestScores[a.unitId] ?? 0.0)) {
-                            bestScores[a.unitId] = p;
-                          }
-                        }
-
-                        final sum = bestScores.values.fold(0.0, (a, b) => a + b);
-                        final overallProgress = sum / units.length;
-                        final overallPct = (overallProgress * 100).toInt();
-
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              height: 48,
-                              width: 48,
-                              child: CircularProgressIndicator(
-                                value: overallProgress,
-                                strokeWidth: 4,
-                                backgroundColor: Colors.white.withValues(alpha: 0.1),
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            ),
-                            Text(
-                              '$overallPct%',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                      loading: () => const SizedBox(width: 48, height: 48),
-                      error: (_, __) => const SizedBox.shrink(),
-                    ),
                   ],
-                ),
-              ),
-            ),
-
-            // Tab Bar
-            const TabBar(
-              indicatorColor: Color(0xFF065F2F),
-              labelColor: Color(0xFF065F2F),
-              unselectedLabelColor: Colors.grey,
-              indicatorSize: TabBarIndicatorSize.tab,
-              labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              tabs: [
-                Tab(text: 'Free Units'),
-                Tab(text: 'All Units'),
-              ],
-            ),
-            const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
-
-            Expanded(
-              child: unitsAsync.when(
-                loading: () => const LoadingView(),
-                error: (e, _) => ErrorView(
-                  message: e.toString(),
-                  onRetry: () => ref.invalidate(unitsProvider),
-                ),
-                data: (units) {
-                  final attempts = attemptsAsync.valueOrNull ?? [];
-
-                  final bestScores = <String, double>{};
-                  for (final a in attempts) {
-                    final p = a.total == 0 ? 0.0 : a.score / a.total;
-                    if (p > (bestScores[a.unitId] ?? 0.0)) {
-                      bestScores[a.unitId] = p;
-                    }
-                  }
-
-                  final freeUnits = units.where((u) => u.isAccessible(false)).toList();
-                  final allUnits = units;
-
-                  return TabBarView(
-                    children: [
-                      // ── Free Units tab ──────────────────────────────────
-                      freeUnits.isEmpty
-                          ? const Center(child: Text('No free units available'))
-                          : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: freeUnits.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final unit = freeUnits[index];
-                          final progress = bestScores[unit.id];
-                          return _UnitListItem(
-                            unit: unit,
-                            hasPaid: hasPaid,
-                            progress: progress,
-                            onTap: () => context.go('/tests/${unit.id}'),
-                          );
-                        },
-                      ),
-
-                      // ── All Units tab ───────────────────────────────────
-                      ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: allUnits.length + (hasPaid ? 0 : 1),
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          if (index == allUnits.length && !hasPaid) {
-                            return _UnlockBanner(
-                              onTap: () => context.push(
-                                '/unlock?from=${Uri.encodeComponent('/tests')}',
-                              ),
-                            );
-                          }
-                          if (index >= allUnits.length) return const SizedBox.shrink();
-
-                          final unit = allUnits[index];
-                          final progress = bestScores[unit.id];
-                          return _UnitListItem(
-                            unit: unit,
-                            hasPaid: hasPaid,
-                            progress: progress,
-                            onTap: () {
-                              final target = '/tests/${unit.id}';
-                              if (!unit.isAccessible(hasPaid)) {
-                                context.push('/unlock?from=${Uri.encodeComponent(target)}');
-                                return;
-                              }
-                              context.go(target);
-                            },
-                          );
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
+                );
+              },
+            );
+          },
         ),
       ),
     );
@@ -257,6 +323,13 @@ class _UnitListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locked = !unit.isAccessible(hasPaid);
+    
+    // Color logic: Green for pass (70%+), Orange for mid, Red for fail (<50%)
+    final Color scoreColor = progress == null 
+        ? const Color(0xFF059669) 
+        : progress! >= 0.7 
+            ? const Color(0xFF059669) 
+            : (progress! >= 0.5 ? Colors.orange : Colors.redAccent);
 
     return InkWell(
       onTap: onTap,
@@ -314,24 +387,23 @@ class _UnitListItem extends StatelessWidget {
                 ],
               ),
             ),
-            // Status Icon / Progress
             if (locked)
               const Icon(Icons.lock_outline, color: Color(0xFF94A3B8), size: 20)
-            else if (progress != null && progress! > 0)
+            else if (progress != null)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '${(progress! * 100).toInt()}%',
-                    style: const TextStyle(
-                      color: Color(0xFF059669),
+                    '${(progress! * 100).round()}%',
+                    style: TextStyle(
+                      color: scoreColor,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(width: 6),
                   if (progress == 1.0)
-                    const Icon(Icons.check_circle_outline, color: Color(0xFF059669), size: 20)
+                    Icon(Icons.check_circle_outline, color: scoreColor, size: 20)
                   else
                     SizedBox(
                       height: 16,
@@ -340,7 +412,7 @@ class _UnitListItem extends StatelessWidget {
                         value: progress,
                         strokeWidth: 2,
                         backgroundColor: const Color(0xFFF1F5F9),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF059669)),
+                        valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
                       ),
                     ),
                 ],
@@ -355,25 +427,25 @@ class _UnitListItem extends StatelessWidget {
 }
 
 class _UnlockBanner extends StatelessWidget {
-  const _UnlockBanner({required this.onTap});
-
+  const _UnlockBanner({required this.onTap, required this.unitCount});
   final VoidCallback onTap;
+  final int unitCount;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
+        color: AppColors.primary.withOpacity(0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
+        border: Border.all(color: AppColors.primary.withOpacity(0.1)),
       ),
       child: Column(
         children: [
-          const Text(
-            'Unlock all 19 units and 950+ questions',
+          Text(
+            'Unlock all $unitCount units and tests',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF065F2F)),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF065F2F)),
           ),
           const SizedBox(height: 8),
           const Text(

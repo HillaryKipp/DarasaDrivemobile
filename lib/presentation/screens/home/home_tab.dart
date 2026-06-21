@@ -281,7 +281,7 @@ class HomeTab extends ConsumerWidget {
                   ),
                 ),
 
-                // Progress Overview Card
+                // Progress Overview Card (Strictly Dynamic & Latest)
                 SliverPadding(
                   padding: const EdgeInsets.all(20),
                   sliver: SliverToBoxAdapter(
@@ -299,7 +299,7 @@ class HomeTab extends ConsumerWidget {
                         ],
                       ),
                       child: InkWell(
-                        onTap: isSignedIn ? null : () => context.push('/auth'),
+                        onTap: isSignedIn ? () => context.go('/stats') : () => context.push('/auth'),
                         borderRadius: BorderRadius.circular(20),
                         child: Padding(
                           padding: const EdgeInsets.all(20),
@@ -331,58 +331,60 @@ class HomeTab extends ConsumerWidget {
                                         Icon(Icons.login_outlined,
                                             size: 14, color: AppColors.primary),
                                       ],
-                                    ),
+                                    )
+                                  else
+                                    const Icon(Icons.chevron_right, size: 16, color: AppColors.primary),
                                 ],
                               ),
                               const SizedBox(height: 20),
                               Builder(
                                 builder: (context) {
-                                  if (!isSignedIn) {
-                                    return _buildStatsRow('0/19', '0', '0%');
-                                  }
-                                  return attemptsAsync.when(
-                                    data: (attempts) {
-                                      final units = unitsAsync.valueOrNull ?? [];
-                                      final totalUnits = units.length > 0 ? units.length : 19;
+                                  return unitsAsync.when(
+                                    loading: () => const Center(child: LinearProgressIndicator()),
+                                    error: (_, __) => _buildStatsRow('?', '?', '?', progress: 0),
+                                    data: (units) {
+                                      final totalUnitsInDb = units.length;
                                       
-                                      // Calculate best scores per unit for progress calculation
-                                      final bestScores = <String, double>{};
-                                      int totalQuestions = 0;
-                                      for (final a in attempts) {
-                                        totalQuestions += a.total;
-                                        final p = a.total == 0 ? 0.0 : a.score / a.total;
-                                        if (p > (bestScores[a.unitId] ?? 0.0)) {
-                                          bestScores[a.unitId] = p;
-                                        }
+                                      if (!isSignedIn) {
+                                        return _buildStatsRow('0 / $totalUnitsInDb', '0', '0%', progress: 0);
                                       }
-                                      
-                                      final unitsCompleted = bestScores.length;
-                                      final avgPct = attempts.isEmpty
-                                          ? 0
-                                          : (attempts.map((a) => a.percentage).reduce((a, b) => a + b) / attempts.length).round();
 
-                                      final overallProgress = units.isEmpty 
-                                          ? 0.0 
-                                          : bestScores.values.fold(0.0, (a, b) => a + b) / units.length;
+                                      return attemptsAsync.when(
+                                        loading: () => const Center(child: LinearProgressIndicator()),
+                                        error: (_, __) => _buildStatsRow('?', '?', '?', progress: 0),
+                                        data: (attempts) {
+                                          // ── Calculate Latest Results Map ──
+                                          final latestScoresMap = <String, int>{};
+                                          int totalQuestionsLatest = 0;
 
-                                      return _buildStatsRow(
-                                        '$unitsCompleted/$totalUnits',
-                                        '$totalQuestions',
-                                        '$avgPct%',
-                                        progress: overallProgress,
+                                          final sortedAttempts = [...attempts]
+                                            ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
+                                          
+                                          for (final a in sortedAttempts) {
+                                            if (!latestScoresMap.containsKey(a.unitId)) {
+                                              latestScoresMap[a.unitId] = a.percentage;
+                                              totalQuestionsLatest += a.total;
+                                            }
+                                          }
+
+                                          final unitsDoneCount = latestScoresMap.length;
+                                          final avgPct = unitsDoneCount == 0 
+                                              ? 0 
+                                              : (latestScoresMap.values.reduce((a, b) => a + b) / unitsDoneCount).round();
+
+                                          final overallProgress = totalUnitsInDb == 0 
+                                              ? 0.0 
+                                              : unitsDoneCount / totalUnitsInDb;
+
+                                          return _buildStatsRow(
+                                            '$unitsDoneCount / $totalUnitsInDb',
+                                            '$totalQuestionsLatest',
+                                            '$avgPct%',
+                                            progress: overallProgress,
+                                          );
+                                        },
                                       );
                                     },
-                                    loading: () => const Center(
-                                      child: Padding(
-                                        padding: EdgeInsets.all(20),
-                                        child: SizedBox(
-                                          height: 24,
-                                          width: 24,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        ),
-                                      ),
-                                    ),
-                                    error: (_, __) => _buildStatsRow('?', '?', '?'),
                                   );
                                 },
                               ),
@@ -420,7 +422,7 @@ class HomeTab extends ConsumerWidget {
                               ),
                               const SizedBox(height: 8),
                               const Text(
-                                'Get unlimited access to all units.',
+                                'Get unlimited access to all content.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: AppColors.textMuted),
                               ),
@@ -441,11 +443,12 @@ class HomeTab extends ConsumerWidget {
                                 child: const Text('Unlock Full Access'),
                               ),
                               const SizedBox(height: 8),
-                              TextButton(
-                                onPressed: () => context.push('/auth'),
-                                child: const Text(
-                                    'Already have an account? Sign in'),
-                              ),
+                              if (!isSignedIn)
+                                TextButton(
+                                  onPressed: () => context.push('/auth'),
+                                  child: const Text(
+                                      'Already have an account? Sign in'),
+                                ),
                             ],
                           ),
                         ),

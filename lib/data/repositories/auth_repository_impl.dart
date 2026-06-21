@@ -82,54 +82,48 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> markAsPaid(String userId, {String? transactionId, double? amount}) async {
-    developer.log('markAsPaid: START userId=$userId txId=$transactionId', name: 'AuthRepo');
+    developer.log('--- DB SYNC START ---', name: 'AuthRepo');
     
-    // Check session first
     if (_client.auth.currentSession == null) {
-      developer.log('markAsPaid: ERROR - No active session', name: 'AuthRepo');
       throw AppException('Your session has expired. Please sign in again.');
     }
 
     try {
-      // 1. Update Profile has_paid status
-      // We use a simple update and check if it worked. 
-      // Avoiding .select().single() because it can hang if RLS results in 0 rows.
-      developer.log('markAsPaid: Attempting profile update...', name: 'AuthRepo');
+      // 1. Try secure RPC first
+      developer.log('Attempting RPC confirm_payment...', name: 'AuthRepo');
+      await _client.rpc('confirm_payment', params: {'user_id_input': userId}).timeout(const Duration(seconds: 12));
+      developer.log('RPC update SUCCESS', name: 'AuthRepo');
       
-      final result = await _client
-          .from('profiles')
-          .update({'has_paid': true})
-          .eq('id', userId)
-          .select('id, has_paid')
-          .timeout(const Duration(seconds: 15));
+    } on PostgrestException catch (e) {
+      developer.log('DB ERROR: ${e.message} (Code: ${e.code})', name: 'AuthRepo');
       
-      if (result.isEmpty) {
-        developer.log('markAsPaid: ERROR - No profile updated (empty result)', name: 'AuthRepo');
-        throw AppException('Profile not found or you do not have permission to update it.');
+      // If the RPC fails because it doesn't exist, try direct update as fallback
+      if (e.message.contains('function') && e.message.contains('does not exist')) {
+        developer.log('RPC not found, trying direct update fallback...', name: 'AuthRepo');
+        await _client
+            .from('profiles')
+            .update({'has_paid': true})
+            .eq('id', userId)
+            .timeout(const Duration(seconds: 10));
+      } else if (e.code == 'P0001' || e.message.contains('Not allowed to modify payment status')) {
+        throw AppException('Account unlock blocked by database trigger. Please remove the restriction trigger from the "profiles" table in Supabase.');
+      } else {
+        rethrow;
       }
-      
-      developer.log('markAsPaid: Profile update SUCCESS', name: 'AuthRepo');
-
-      // 2. Log Payment (Non-fatal, but we try anyway)
-      if (transactionId != null) {
-        developer.log('markAsPaid: Logging payment record...', name: 'AuthRepo');
-        await _client.from('payments').insert({
-          'user_id': userId,
-          'amount': amount?.toInt() ?? 500,
-          'purpose': 'account_unlock',
-          'transaction_id': transactionId,
-          'status': 'completed',
-        }).timeout(const Duration(seconds: 10));
-        developer.log('markAsPaid: Payment record SUCCESS', name: 'AuthRepo');
-      }
-    } on AppException {
-      rethrow;
-    } catch (e) {
-      developer.log('markAsPaid: UNEXPECTED ERROR: $e', name: 'AuthRepo');
-      throw AppException('Failed to sync payment status. Please try again. ($e)');
     }
-    
-    developer.log('markAsPaid: FINISHED', name: 'AuthRepo');
+
+    // 2. Log Payment record (non-fatal)
+    if (transactionId != null) {
+      _client.from('payments').insert({
+        'user_id': userId,
+        'amount': amount?.toInt() ?? 500,
+        'purpose': 'account_unlock',
+        'transaction_id': transactionId,
+        'status': 'completed',
+      }).timeout(const Duration(seconds: 5)).catchError((e) {
+        developer.log('Payment logging non-fatal error: $e', name: 'AuthRepo');
+      });
+    }
   }
 
   @override

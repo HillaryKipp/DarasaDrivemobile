@@ -262,7 +262,7 @@ class _MaterialTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     _locked
-                        ? 'Sign in to access'
+                        ? 'Unlock to access'
                         : (_isVideo ? 'Video Lesson' : 'PDF Document'),
                     style: TextStyle(
                       color: _locked

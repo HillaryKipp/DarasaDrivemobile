@@ -100,14 +100,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   Future<void> _navigateAfterSignIn() async {
     final user = ref.read(currentUserProvider);
     if (user == null || !mounted) return;
-    final profile = await ref.read(authRepositoryProvider).getProfile(user.id);
     ref.invalidate(userProfileProvider);
     if (!mounted) return;
-    if (profile.hasPaid) {
-      context.go('/home');
-    } else {
-      context.go('/unlock');
-    }
+    
+    // Restoration: Go to home after sign-in. 
+    // Premium items will trigger the unlock screen on-demand.
+    context.go('/home');
   }
 
   // ── Auth actions ────────────────────────────────────────────────────────────
@@ -188,7 +186,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         content: Text(
           'We sent a confirmation link to:\n$email\n\n'
               'Tap the link to verify your account, then come back to sign in. '
-              'After signing in you will be guided to pay via M-Pesa.',
+              'After signing in you will be guided to pay via Google Play.',
           style: const TextStyle(height: 1.5),
         ),
         actions: [
@@ -251,9 +249,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
 
   @override
   Widget build(BuildContext context) {
-    // PopScope intercepts the Android back gesture/button.
-    // On sign-up tab → go back to sign-in tab (canPop = false, consume it).
-    // On sign-in tab → allow normal route pop.
     return PopScope(
       canPop: _tabController.index == 0,
       onPopInvokedWithResult: (didPop, _) {
@@ -263,8 +258,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAF9),
-        // AppBar only shown when we can navigate back (i.e. there's a previous
-        // route), matching the support tab pattern of no bar when it's the root.
         appBar: context.canPop()
             ? AppBar(
           backgroundColor: const Color(0xFF065F2F),
@@ -364,7 +357,6 @@ class _AuthHero extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
           child: Row(
             children: [
-              // Icon + name
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -397,14 +389,7 @@ class _AuthHero extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              // Compact step pills
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  _StepPill(icon: Icons.person_add_outlined, label: 'Sign in/Register'),
-
-                 ],
-              ),
+              const _StepPill(icon: Icons.person_add_outlined, label: 'Sign in/Register'),
             ],
           ),
         ),
@@ -441,16 +426,6 @@ class _StepPill extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Arrow extends StatelessWidget {
-  const _Arrow();
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 3),
-    child: Icon(Icons.arrow_forward_rounded,
-        color: Colors.white.withValues(alpha: 0.4), size: 13),
-  );
 }
 
 // ── Tab Selector ──────────────────────────────────────────────────────────────
@@ -635,7 +610,7 @@ class _SignInForm extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoChip(
+        const _InfoChip(
           icon: Icons.info_outline,
           text: 'Sign in after verifying your email.',
         ),
@@ -683,7 +658,7 @@ class _SignInForm extends StatelessWidget {
         _primaryButton(
             label: 'Sign in', loading: loading, onPressed: onSubmit),
         const SizedBox(height: 16),
-        _OrDivider(),
+        const _OrDivider(),
         const SizedBox(height: 16),
         Center(
           child: GestureDetector(
@@ -741,7 +716,7 @@ class _SignUpForm extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoChip(
+        const _InfoChip(
           icon: Icons.verified_user_outlined,
           text: 'Register.',
         ),
@@ -810,7 +785,7 @@ class _SignUpForm extends StatelessWidget {
             loading: loading,
             onPressed: onSubmit),
         const SizedBox(height: 16),
-        _OrDivider(),
+        const _OrDivider(),
         const SizedBox(height: 16),
         Center(
           child: GestureDetector(
@@ -873,6 +848,7 @@ class _InfoChip extends StatelessWidget {
 }
 
 class _OrDivider extends StatelessWidget {
+  const _OrDivider({super.key});
   @override
   Widget build(BuildContext context) {
     return Row(
