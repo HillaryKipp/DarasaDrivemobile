@@ -17,15 +17,16 @@ class StatisticsScreen extends ConsumerWidget {
     final attemptsAsync = ref.watch(testAttemptsProvider);
     final unitsAsync = ref.watch(unitsProvider);
 
+    // True only while data already exists and a new fetch is happening
+    // quietly in the background (e.g. right after login).
+    final isRefreshing = attemptsAsync.isRefreshing || unitsAsync.isRefreshing;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF9),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.chevron_left, color: Colors.black, size: 28),
-          onPressed: () => context.pop(),
-        ),
+        automaticallyImplyLeading: false,
         title: const Text(
           'STATISTICS',
           style: TextStyle(
@@ -36,10 +37,18 @@ class StatisticsScreen extends ConsumerWidget {
           ),
         ),
         centerTitle: true,
+        bottom: isRefreshing
+            ? const PreferredSize(
+          preferredSize: Size.fromHeight(2),
+          child: LinearProgressIndicator(
+            minHeight: 2,
+            backgroundColor: Color(0xFFE2E8F0),
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF065F2F)),
+          ),
+        )
+            : null,
       ),
       body: attemptsAsync.when(
-        // Force the UI to show a loader during a refresh so the user knows data is updating
-        skipLoadingOnRefresh: false, 
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
           message: e.toString(),
@@ -47,7 +56,6 @@ class StatisticsScreen extends ConsumerWidget {
         ),
         data: (attempts) {
           return unitsAsync.when(
-            skipLoadingOnRefresh: false,
             loading: () => const LoadingView(),
             error: (e, _) => ErrorView(
               message: e.toString(),
@@ -58,7 +66,7 @@ class StatisticsScreen extends ConsumerWidget {
               final latestAttemptsMap = <String, TestAttempt>{};
               final sortedAttempts = [...attempts]
                 ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
-              
+
               for (final a in sortedAttempts) {
                 if (!latestAttemptsMap.containsKey(a.unitId)) {
                   latestAttemptsMap[a.unitId] = a;
@@ -68,17 +76,17 @@ class StatisticsScreen extends ConsumerWidget {
               // ── 2. Summary Statistics (Calculated strictly from Latest) ──
               final totalUnitsCount = units.length;
               final unitsDoneCount = latestAttemptsMap.length;
-              
+
               int totalQuestionsDone = 0;
               int totalCorrectDone = 0;
               int sumPercentages = 0;
-              
+
               for (final attempt in latestAttemptsMap.values) {
                 totalQuestionsDone += attempt.total;
                 totalCorrectDone += attempt.score;
                 sumPercentages += attempt.percentage;
               }
-              
+
               final avgPct = unitsDoneCount == 0 ? 0 : (sumPercentages / unitsDoneCount).round();
               final sortedUnits = [...units]..sort((a, b) => a.unitNumber.compareTo(b.unitNumber));
 
@@ -143,21 +151,21 @@ class StatisticsScreen extends ConsumerWidget {
                           const SizedBox(height: 16),
                           SizedBox(
                             height: 160,
-                            child: sortedUnits.isEmpty 
-                              ? const Center(child: Text('No units found'))
-                              : SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: sortedUnits.map((unit) {
-                                    final score = latestAttemptsMap[unit.id]?.percentage ?? 0;
-                                    return _BarChartItem(
-                                      score: score,
-                                      label: 'U${unit.unitNumber}',
-                                    );
-                                  }).toList(),
-                                ),
+                            child: sortedUnits.isEmpty
+                                ? const Center(child: Text('No units found'))
+                                : SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: sortedUnits.map((unit) {
+                                  final score = latestAttemptsMap[unit.id]?.percentage ?? 0;
+                                  return _BarChartItem(
+                                    score: score,
+                                    label: 'U${unit.unitNumber}',
+                                  );
+                                }).toList(),
                               ),
+                            ),
                           ),
                         ],
                       ),
@@ -172,7 +180,7 @@ class StatisticsScreen extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _RecentAttemptsList(attempts: attempts), 
+                    _RecentAttemptsList(attempts: attempts),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -260,8 +268,8 @@ class _BarChartItem extends StatelessWidget {
             width: 16,
             height: (score / 100) * 110 + 2, // 2px min visible base
             decoration: BoxDecoration(
-              color: score == 0 
-                  ? const Color(0xFFF1F5F9) 
+              color: score == 0
+                  ? const Color(0xFFF1F5F9)
                   : (isPassed ? const Color(0xFF065F2F) : Colors.orange),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
             ),
@@ -377,8 +385,8 @@ class _AttemptScore extends StatelessWidget {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: percentage >= 70 
-                ? const Color(0xFF059669) 
+            color: percentage >= 70
+                ? const Color(0xFF059669)
                 : (percentage >= 50 ? Colors.orange : Colors.red),
           ),
         ),

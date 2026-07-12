@@ -29,10 +29,7 @@ class MaterialsScreen extends ConsumerWidget {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.chevron_left, color: Colors.black, size: 28),
-            onPressed: () => context.pop(),
-          ),
+          automaticallyImplyLeading: false,
           title: const Text(
             'LIBRARY',
             style: TextStyle(
@@ -43,12 +40,6 @@ class MaterialsScreen extends ConsumerWidget {
             ),
           ),
           centerTitle: true,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.search, color: Colors.black),
-              onPressed: () {},
-            ),
-          ],
         ),
         body: Column(
           children: [
@@ -358,20 +349,12 @@ class _PdfViewerScreenState extends State<_PdfViewerScreen> {
         onPageChanged: (details) {
           setState(() => _currentPage = details.newPageNumber);
         },
-        onDocumentLoadFailed: (details) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to load PDF: ${details.description}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        },
       ),
     );
   }
 }
 
-// ── YouTube Viewer ────────────────────────────────────────────────────────────
+// ── Youtube Viewer ────────────────────────────────────────────────────────────
 
 class _YoutubeViewerScreen extends StatefulWidget {
   const _YoutubeViewerScreen({required this.title, required this.videoId});
@@ -384,32 +367,26 @@ class _YoutubeViewerScreen extends StatefulWidget {
 }
 
 class _YoutubeViewerScreenState extends State<_YoutubeViewerScreen> {
-  late final YoutubePlayerController _controller;
+  late YoutubePlayerController _controller;
 
   @override
   void initState() {
     super.initState();
     _controller = YoutubePlayerController.fromVideoId(
       videoId: widget.videoId,
-      autoPlay: false,
+      autoPlay: true,
       params: const YoutubePlayerParams(
-        showControls: true,
         showFullscreenButton: true,
         mute: false,
+        showControls: true,
       ),
     );
   }
 
   @override
-  void dispose() {
-    _controller.close();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAF9),
+      backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -419,46 +396,19 @@ class _YoutubeViewerScreenState extends State<_YoutubeViewerScreen> {
         ),
         title: Text(
           widget.title.toUpperCase(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Color(0xFF065F2F),
             fontWeight: FontWeight.bold,
             fontSize: 16,
-            letterSpacing: 0.8,
           ),
         ),
         centerTitle: true,
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          YoutubePlayer(
-            controller: _controller,
-            aspectRatio: 16 / 9,
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Video Lesson',
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-        ],
+      body: Center(
+        child: YoutubePlayer(
+          controller: _controller,
+          aspectRatio: 16 / 9,
+        ),
       ),
     );
   }

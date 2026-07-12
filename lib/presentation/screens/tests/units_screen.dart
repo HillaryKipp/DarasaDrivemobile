@@ -45,10 +45,7 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.chevron_left, color: Colors.black, size: 28),
-            onPressed: () => context.pop(),
-          ),
+          automaticallyImplyLeading: false,
           title: _isSearching
               ? TextField(
                   controller: _searchController,
@@ -84,12 +81,6 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
                 });
               },
             ),
-            if (!_isSearching)
-              IconButton(
-                icon: const Icon(Icons.refresh, color: Colors.black),
-                onPressed: _onRefresh,
-                tooltip: 'Refresh results',
-              ),
           ],
         ),
         body: unitsAsync.when(

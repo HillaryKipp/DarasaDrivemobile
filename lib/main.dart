@@ -7,20 +7,23 @@ import 'app.dart';
 import 'core/config/app_config.dart';
 
 Future<void> main() async {
-  // 1. Preserve splash screen before anything else runs
+  // 1. Preserve splash screen until we are ready to show the first screen
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   // 2. Initialize Supabase
-  await Supabase.initialize(
-    url: AppConfig.supabaseUrl,
-    anonKey: AppConfig.supabaseAnonKey,
-  );
+  try {
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      anonKey: AppConfig.supabaseAnonKey,
+    );
+  } catch (e) {
+    debugPrint('Supabase init error: $e');
+    // We continue so the app can show a proper error UI
+  }
 
-  // 3. Remove splash screen — app is ready
-  FlutterNativeSplash.remove();
-
-  // 4. Launch app
+  // 3. Launch app
+  // Note: FlutterNativeSplash.remove() is now handled inside DarasaDriveApp
   runApp(
     const ProviderScope(
       child: DarasaDriveApp(),

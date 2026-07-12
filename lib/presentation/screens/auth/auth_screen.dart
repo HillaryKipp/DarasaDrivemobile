@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/errors/app_exception.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/repository_providers.dart';
+import 'reset_password_screen.dart' show PasswordPolicy, PasswordStrengthChecklist;
+
+const _kRememberedEmailKey = 'remembered_email';
 
 class AuthScreenArgs {
   const AuthScreenArgs({
@@ -43,9 +48,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _signUpPasswordController = TextEditingController();
 
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _rememberMe = true;
+  String _signUpPassword = '';
 
   @override
   void initState() {
@@ -57,12 +65,37 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     );
     // Rebuild when tab changes so the form swaps
     _tabController.addListener(() => setState(() {}));
-    
-    if (widget.prefillEmail != null) _emailController.text = widget.prefillEmail!;
-    
+
+    _signUpPasswordController.addListener(() {
+      setState(() => _signUpPassword = _signUpPasswordController.text);
+    });
+
+    if (widget.prefillEmail != null) {
+      _emailController.text = widget.prefillEmail!;
+    } else {
+      _loadRememberedEmail();
+    }
+
     // Pre-fill 254 prefix for phone
     _phoneController.text = widget.prefillPhone ?? '254';
     _phoneController.addListener(_handlePhonePrefix);
+  }
+
+  Future<void> _loadRememberedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_kRememberedEmailKey);
+    if (saved != null && mounted) {
+      setState(() => _emailController.text = saved);
+    }
+  }
+
+  Future<void> _persistRememberedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setString(_kRememberedEmailKey, _emailController.text.trim());
+    } else {
+      await prefs.remove(_kRememberedEmailKey);
+    }
   }
 
   void _handlePhonePrefix() {
@@ -82,28 +115,19 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     _passwordController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
+    _signUpPasswordController.dispose();
     super.dispose();
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────────
-
-  /// Called when user presses the system/hardware back button.
-  /// If on Sign Up tab, go back to Sign In tab instead of leaving.
-  bool _onPopInvoked() {
-    if (_tabController.index == 1) {
-      _tabController.animateTo(0);
-      return false; // consume — don't pop the route
-    }
-    return true; // allow pop
-  }
 
   Future<void> _navigateAfterSignIn() async {
     final user = ref.read(currentUserProvider);
     if (user == null || !mounted) return;
     ref.invalidate(userProfileProvider);
     if (!mounted) return;
-    
-    // Restoration: Go to home after sign-in. 
+
+    // Restoration: Go to home after sign-in.
     // Premium items will trigger the unlock screen on-demand.
     context.go('/home');
   }
@@ -121,6 +145,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
+      await _persistRememberedEmail();
+      // Signal the platform autofill service (Google/Play Services Password
+      // Manager or iOS Keychain) that the credential entry is complete, so
+      // it can prompt the user to save it.
+      TextInput.finishAutofillContext();
       await _navigateAfterSignIn();
     } catch (e) {
       _showError(e);
@@ -133,7 +162,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
     final name = _nameController.text.trim();
-    final password = _passwordController.text;
+    final password = _signUpPasswordController.text;
 
     if (email.isEmpty || phone.isEmpty || name.isEmpty || password.isEmpty) {
       _showMsg('Please fill in all fields to create your account.', isError: true);
@@ -143,6 +172,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     // Validate phone number format (2547XXXXXXXX or 2541XXXXXXXX)
     if (!RegExp(r'^254[17]\d{8}$').hasMatch(phone)) {
       _showMsg('Enter a valid M-Pesa number starting with 2547... or 2541...', isError: true);
+      return;
+    }
+
+    if (!PasswordPolicy.isStrong(password)) {
+      _showMsg('Please meet all password requirements shown below.', isError: true);
       return;
     }
 
@@ -160,6 +194,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         _showEmailVerificationDialog(email);
       } else {
         await auth.signIn(email: email, password: password);
+        TextInput.finishAutofillContext();
         _showMsg('Account created successfully!');
         await _navigateAfterSignIn();
       }
@@ -176,11 +211,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.mark_email_read_outlined, color: AppColors.primary),
-            SizedBox(width: 10),
-            Text('Check your email'),
+            const Icon(Icons.mark_email_read_outlined, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Check your email',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
           ],
         ),
         content: Text(
@@ -210,20 +250,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     );
   }
 
-  Future<void> _forgotPassword() async {
-    if (_emailController.text.trim().isEmpty) {
-      _showMsg('Enter your email above first, then tap Forgot password.',
-          isError: true);
-      return;
-    }
-    try {
-      await ref
-          .read(authRepositoryProvider)
-          .resetPassword(_emailController.text.trim());
-      _showMsg('Password reset link sent — check your inbox.');
-    } catch (e) {
-      _showError(e);
-    }
+  void _forgotPassword() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _ForgotPasswordDialog(
+        initialEmail: _emailController.text.trim(),
+        onSend: (email) => ref.read(authRepositoryProvider).resetPassword(email),
+      ),
+    );
   }
 
   void _showError(Object e) {
@@ -305,6 +339,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                         onToggleObscure: () => setState(
                                 () => _obscurePassword = !_obscurePassword),
                         loading: _loading,
+                        rememberMe: _rememberMe,
+                        onRememberMeChanged: (v) =>
+                            setState(() => _rememberMe = v),
                         onSubmit: _signIn,
                         onForgotPassword: _forgotPassword,
                         onGoToSignUp: () =>
@@ -315,7 +352,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                         nameController: _nameController,
                         emailController: _emailController,
                         phoneController: _phoneController,
-                        passwordController: _passwordController,
+                        passwordController: _signUpPasswordController,
+                        password: _signUpPassword,
                         obscurePassword: _obscurePassword,
                         onToggleObscure: () => setState(
                                 () => _obscurePassword = !_obscurePassword),
@@ -516,6 +554,132 @@ class _TabPill extends StatelessWidget {
   }
 }
 
+// ── Forgot Password Dialog ────────────────────────────────────────────────────
+
+/// Focused, email-only dialog for the "forgot password" action.
+/// Deliberately does NOT show anywhere near a password field — the sign-in
+/// password field belongs to a different action and showing it here was
+/// confusing users about what they were being asked to do.
+class _ForgotPasswordDialog extends StatefulWidget {
+  const _ForgotPasswordDialog({required this.initialEmail, required this.onSend});
+  final String initialEmail;
+  final Future<void> Function(String email) onSend;
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  late final TextEditingController _emailController =
+  TextEditingController(text: widget.initialEmail);
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Enter a valid email address.');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await widget.onSend(email);
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Password reset link sent — check your inbox.'),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } catch (e) {
+      final message = e is AppException ? e.message : 'Failed to send reset link.';
+      if (mounted) setState(() => _error = message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          const Icon(Icons.lock_reset_outlined, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Reset your password',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Enter your account email and we'll send you a link to set a new password.",
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.email],
+            onSubmitted: (_) => _submit(),
+            decoration: _fieldDecor(
+              label: 'Email address',
+              hint: 'you@email.com',
+              icon: Icons.email_outlined,
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          onPressed: _loading ? null : _submit,
+          child: _loading
+              ? const SizedBox(
+            height: 16,
+            width: 16,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+          )
+              : const Text('Send link'),
+        ),
+      ],
+    );
+  }
+}
+
 // ── Shared field decoration ───────────────────────────────────────────────────
 
 InputDecoration _fieldDecor({
@@ -591,6 +755,8 @@ class _SignInForm extends StatelessWidget {
     required this.obscurePassword,
     required this.onToggleObscure,
     required this.loading,
+    required this.rememberMe,
+    required this.onRememberMeChanged,
     required this.onSubmit,
     required this.onForgotPassword,
     required this.onGoToSignUp,
@@ -601,86 +767,128 @@ class _SignInForm extends StatelessWidget {
   final bool obscurePassword;
   final VoidCallback onToggleObscure;
   final bool loading;
+  final bool rememberMe;
+  final ValueChanged<bool> onRememberMeChanged;
   final VoidCallback onSubmit;
   final VoidCallback onForgotPassword;
   final VoidCallback onGoToSignUp;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _InfoChip(
-          icon: Icons.info_outline,
-          text: 'Sign in after verifying your email.',
-        ),
-        const SizedBox(height: 20),
-        TextField(
-          controller: emailController,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          decoration: _fieldDecor(
-              label: 'Email address', hint: 'you@email.com', icon: Icons.email_outlined),
-        ),
-        const SizedBox(height: 14),
-        TextField(
-          controller: passwordController,
-          obscureText: obscurePassword,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => onSubmit(),
-          decoration: _fieldDecor(
-            label: 'Password',
-            hint: '••••••••',
-            icon: Icons.lock_outline,
-            suffix: IconButton(
-              icon: Icon(
-                obscurePassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                color: AppColors.textMuted,
-                size: 20,
+    // AutofillGroup lets the OS (Google Password Manager / iOS Keychain)
+    // recognize this as a login form and offer to save the credentials
+    // after a successful sign-in, and to suggest saved ones on future visits.
+    return AutofillGroup(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _InfoChip(
+            icon: Icons.info_outline,
+            text: 'Sign in after verifying your email.',
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.username, AutofillHints.email],
+            decoration: _fieldDecor(
+                label: 'Email address', hint: 'you@email.com', icon: Icons.email_outlined),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: passwordController,
+            obscureText: obscurePassword,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.password],
+            onSubmitted: (_) => onSubmit(),
+            decoration: _fieldDecor(
+              label: 'Password',
+              hint: '••••••••',
+              icon: Icons.lock_outline,
+              suffix: IconButton(
+                icon: Icon(
+                  obscurePassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  color: AppColors.textMuted,
+                  size: 20,
+                ),
+                onPressed: onToggleObscure,
               ),
-              onPressed: onToggleObscure,
             ),
           ),
-        ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: loading ? null : onForgotPassword,
-            style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-            child: const Text('Forgot password?',
-                style:
-                TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          ),
-        ),
-        const SizedBox(height: 4),
-        _primaryButton(
-            label: 'Sign in', loading: loading, onPressed: onSubmit),
-        const SizedBox(height: 16),
-        const _OrDivider(),
-        const SizedBox(height: 16),
-        Center(
-          child: GestureDetector(
-            onTap: loading ? null : onGoToSignUp,
-            child: RichText(
-              text: const TextSpan(
-                text: "Don't have an account? ",
-                style:
-                TextStyle(color: AppColors.textMuted, fontSize: 13),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 4,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextSpan(
-                    text: 'Create one',
-                    style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700),
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: Checkbox(
+                      value: rememberMe,
+                      activeColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4)),
+                      onChanged: (v) => onRememberMeChanged(v ?? true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => onRememberMeChanged(!rememberMe),
+                    child: const Text(
+                      '',
+                      style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                    ),
                   ),
                 ],
               ),
+              TextButton(
+                onPressed: loading ? null : onForgotPassword,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('                 Forgot password?',
+                    style:
+                    TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _primaryButton(
+              label: 'Sign in', loading: loading, onPressed: onSubmit),
+          const SizedBox(height: 16),
+          const _OrDivider(),
+          const SizedBox(height: 16),
+          Center(
+            child: GestureDetector(
+              onTap: loading ? null : onGoToSignUp,
+              child: RichText(
+                text: const TextSpan(
+                  text: "Don't have an account? ",
+                  style:
+                  TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  children: [
+                    TextSpan(
+                      text: 'Create one',
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -694,6 +902,7 @@ class _SignUpForm extends StatelessWidget {
     required this.emailController,
     required this.phoneController,
     required this.passwordController,
+    required this.password,
     required this.obscurePassword,
     required this.onToggleObscure,
     required this.loading,
@@ -705,6 +914,7 @@ class _SignUpForm extends StatelessWidget {
   final TextEditingController emailController;
   final TextEditingController phoneController;
   final TextEditingController passwordController;
+  final String password;
   final bool obscurePassword;
   final VoidCallback onToggleObscure;
   final bool loading;
@@ -713,101 +923,109 @@ class _SignUpForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _InfoChip(
-          icon: Icons.verified_user_outlined,
-          text: 'Register.',
-        ),
-        const SizedBox(height: 20),
-        TextField(
-          controller: nameController,
-          textCapitalization: TextCapitalization.words,
-          textInputAction: TextInputAction.next,
-          decoration: _fieldDecor(
-              label: 'Full name',
-              hint: 'Jane Mwangi',
-              icon: Icons.person_outline),
-        ),
-        const SizedBox(height: 14),
-        TextField(
-          controller: emailController,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          decoration: _fieldDecor(
-              label: 'Email address',
-              hint: 'you@email.com',
-              icon: Icons.email_outlined),
-        ),
-        const SizedBox(height: 14),
-        TextField(
-          controller: phoneController,
-          keyboardType: TextInputType.phone,
-          textInputAction: TextInputAction.next,
-          decoration: _fieldDecor(
-              label: 'Your phone number',
-              hint: '2547XXXXXXXX',
-              icon: Icons.phone_outlined),
-        ),
-        const Padding(
-          padding: EdgeInsets.only(left: 4, top: 4),
-          child: Text(
-            'Format: 2547XXXXXXXX',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+    return AutofillGroup(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _InfoChip(
+            icon: Icons.verified_user_outlined,
+            text: 'Register.',
           ),
-        ),
-        const SizedBox(height: 14),
-        TextField(
-          controller: passwordController,
-          obscureText: obscurePassword,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => onSubmit(),
-          decoration: _fieldDecor(
-            label: 'Password',
-            hint: 'At least 8 characters',
-            icon: Icons.lock_outline,
-            suffix: IconButton(
-              icon: Icon(
-                obscurePassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                color: AppColors.textMuted,
-                size: 20,
-              ),
-              onPressed: onToggleObscure,
+          const SizedBox(height: 20),
+          TextField(
+            controller: nameController,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.name],
+            decoration: _fieldDecor(
+                label: 'Full name',
+                hint: 'Jane Mwangi',
+                icon: Icons.person_outline),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.email],
+            decoration: _fieldDecor(
+                label: 'Email address',
+                hint: 'you@email.com',
+                icon: Icons.email_outlined),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: phoneController,
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.telephoneNumber],
+            decoration: _fieldDecor(
+                label: 'Your phone number',
+                hint: '2547XXXXXXXX',
+                icon: Icons.phone_outlined),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(left: 4, top: 4),
+            child: Text(
+              'Format: 2547XXXXXXXX',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 11),
             ),
           ),
-        ),
-        const SizedBox(height: 20),
-        _primaryButton(
-            label: 'Create account',
-            loading: loading,
-            onPressed: onSubmit),
-        const SizedBox(height: 16),
-        const _OrDivider(),
-        const SizedBox(height: 16),
-        Center(
-          child: GestureDetector(
-            onTap: loading ? null : onGoToSignIn,
-            child: RichText(
-              text: const TextSpan(
-                text: 'Already have an account? ',
-                style:
-                TextStyle(color: AppColors.textMuted, fontSize: 13),
-                children: [
-                  TextSpan(
-                    text: 'Sign in',
-                    style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700),
-                  ),
-                ],
+          const SizedBox(height: 14),
+          TextField(
+            controller: passwordController,
+            obscureText: obscurePassword,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.newPassword],
+            onSubmitted: (_) => onSubmit(),
+            decoration: _fieldDecor(
+              label: 'Password',
+              hint: 'At least 8 characters',
+              icon: Icons.lock_outline,
+              suffix: IconButton(
+                icon: Icon(
+                  obscurePassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  color: AppColors.textMuted,
+                  size: 20,
+                ),
+                onPressed: onToggleObscure,
               ),
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 12),
+          PasswordStrengthChecklist(password: password),
+          const SizedBox(height: 20),
+          _primaryButton(
+              label: 'Create account',
+              loading: loading,
+              onPressed: onSubmit),
+          const SizedBox(height: 16),
+          const _OrDivider(),
+          const SizedBox(height: 16),
+          Center(
+            child: GestureDetector(
+              onTap: loading ? null : onGoToSignIn,
+              child: RichText(
+                text: const TextSpan(
+                  text: 'Already have an account? ',
+                  style:
+                  TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  children: [
+                    TextSpan(
+                      text: 'Sign in',
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

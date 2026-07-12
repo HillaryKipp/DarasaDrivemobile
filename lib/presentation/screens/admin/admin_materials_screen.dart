@@ -135,7 +135,7 @@ class _AdminMaterialFormScreenState
   String? _unitId;
   bool _saving = false;
 
-  static const _types = ['notes', 'video', 'diagram', 'road_signs'];
+  static const _types = ['notes', 'pdf', 'video', 'diagram', 'road_signs'];
 
   @override
   void initState() {
@@ -145,8 +145,21 @@ class _AdminMaterialFormScreenState
     _descCtrl = TextEditingController(text: m?.description ?? '');
     _urlCtrl = TextEditingController(text: m?.url ?? '');
     _thumbCtrl = TextEditingController(text: m?.thumbnailUrl ?? '');
-    _type = m?.type ?? 'notes';
+
+    // Normalize + defensively match the incoming type against the known
+    // list. Handles case differences, stray whitespace, or a type value
+    // that no longer exists in _types (e.g. legacy/removed type).
+    final rawType = (m?.type ?? '').trim().toLowerCase();
+    _type = _types.firstWhere(
+          (t) => t == rawType,
+      orElse: () => 'notes',
+    );
+
     _isFree = m?.isFree ?? false;
+
+    // Note: MaterialItem doesn't expose a unitId getter (only unitTitle),
+    // so on edit we can't pre-select the unit from the entity alone.
+    // _unitId stays null (defaults to "None") unless the user picks one.
   }
 
   @override
@@ -217,7 +230,10 @@ class _AdminMaterialFormScreenState
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _type,
+                // Belt-and-braces: even though _type is normalized in
+                // initState, re-validate against the current items list
+                // right here so a bad value can never reach the widget.
+                value: _types.contains(_type) ? _type : 'notes',
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: _types
@@ -240,19 +256,33 @@ class _AdminMaterialFormScreenState
               unitsAsync.when(
                 loading: () => const LinearProgressIndicator(),
                 error: (_, __) => const SizedBox.shrink(),
-                data: (units) => DropdownButtonFormField<String?>(
-                  value: _unitId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Unit (optional)'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('None')),
-                    ...units.map((u) => DropdownMenuItem(
-                      value: u.id,
-                      child: Text('Unit ${u.unitNumber}: ${u.title}', overflow: TextOverflow.ellipsis),
-                    )),
-                  ],
-                  onChanged: (v) => setState(() => _unitId = v),
-                ),
+                data: (units) {
+                  // If the currently selected unit id doesn't exist in the
+                  // fetched list (deleted unit, stale draft, id-format
+                  // mismatch, etc.) fall back to "None" for display rather
+                  // than crashing. We don't mutate _unitId here directly
+                  // during build; onChanged is the only place state changes.
+                  final validIds = units.map((u) => u.id).toSet();
+                  final displayValue =
+                  (_unitId != null && validIds.contains(_unitId))
+                      ? _unitId
+                      : null;
+
+                  return DropdownButtonFormField<String?>(
+                    value: displayValue,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Unit (optional)'),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('None')),
+                      ...units.map((u) => DropdownMenuItem(
+                        value: u.id,
+                        child: Text('Unit ${u.unitNumber}: ${u.title}',
+                            overflow: TextOverflow.ellipsis),
+                      )),
+                    ],
+                    onChanged: (v) => setState(() => _unitId = v),
+                  );
+                },
               ),
               SwitchListTile(
                 title: const Text('Free access'),

@@ -32,15 +32,50 @@ import '../screens/unlock/unlock_screen.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
+/// A ChangeNotifier that pings go_router's `refreshListenable` whenever
+/// auth-relevant providers change, WITHOUT causing the GoRouter itself
+/// (and its Navigator widgets) to be torn down and rebuilt.
+///
+/// This is the key fix: previously `appRouterProvider` called `ref.watch`
+/// on authStateProvider/isAdminProvider/hasPaidProvider directly, which
+/// made Riverpod reconstruct a brand-new GoRouter (reusing the same
+/// GlobalKeys) on every auth event — including right when the
+/// password-recovery deep link lands — causing a
+/// "Multiple widgets used the same GlobalKey" crash immediately after
+/// the link opens the app.
+class _RouterRefreshNotifier extends ChangeNotifier {
+  _RouterRefreshNotifier(this._ref) {
+    _ref.listen(authStateProvider, (_, __) => notifyListeners());
+    _ref.listen(isAdminProvider, (_, __) => notifyListeners());
+    _ref.listen(hasPaidProvider, (_, __) => notifyListeners());
+  }
+  final Ref _ref;
+}
+
+final _routerRefreshProvider = Provider<_RouterRefreshNotifier>((ref) {
+  final notifier = _RouterRefreshNotifier(ref);
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
+
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
-  final isAdminAsync = ref.watch(isAdminProvider);
-  final hasPaid = ref.watch(hasPaidProvider);
+  // Only watched dependency is the stable refresh notifier itself —
+  // this provider (and therefore the GoRouter it returns) is built
+  // exactly once for the app's lifetime.
+  final refreshNotifier = ref.watch(_routerRefreshProvider);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/home',
+    refreshListenable: refreshNotifier,
     redirect: (context, state) {
+      // `ref.read` here (not watch) — redirect is re-evaluated whenever
+      // refreshListenable fires, so we always read fresh values without
+      // needing to watch (and without rebuilding the router).
+      final authState = ref.read(authStateProvider);
+      final isAdminAsync = ref.read(isAdminProvider);
+      final hasPaid = ref.read(hasPaidProvider);
+
       final isLoading = authState.isLoading;
       if (isLoading) return null;
 
@@ -117,7 +152,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin',
         redirect: (context, state) =>
-            state.uri.path == '/admin' ? '/admin/dashboard' : null,
+        state.uri.path == '/admin' ? '/admin/dashboard' : null,
         routes: [
           GoRoute(
             path: 'dashboard',
