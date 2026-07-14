@@ -33,7 +33,7 @@ class AdminMaterialsScreen extends ConsumerWidget {
             AdminBanner(
               icon: Icons.menu_book_outlined,
               title: 'Materials',
-              subtitle: '${materials.length} items · notes, videos & diagrams',
+              subtitle: '${materials.length} items · PDFs & Videos',
             ),
             const AdminSectionLabel(text: 'All Materials'),
             Padding(
@@ -135,7 +135,7 @@ class _AdminMaterialFormScreenState
   String? _unitId;
   bool _saving = false;
 
-  static const _types = ['notes', 'pdf', 'video', 'diagram', 'road_signs'];
+  static const _types = ['pdf', 'video'];
 
   @override
   void initState() {
@@ -152,7 +152,7 @@ class _AdminMaterialFormScreenState
     final rawType = (m?.type ?? '').trim().toLowerCase();
     _type = _types.firstWhere(
           (t) => t == rawType,
-      orElse: () => 'notes',
+      orElse: () => 'pdf',
     );
 
     _isFree = m?.isFree ?? false;
@@ -218,28 +218,49 @@ class _AdminMaterialFormScreenState
           child: Column(
             children: [
               TextFormField(
-                controller: _titleCtrl,
-                decoration: const InputDecoration(labelText: 'Title'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descCtrl,
-                maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Description'),
+                controller: _urlCtrl,
+                decoration: InputDecoration(
+                  labelText: _type == 'pdf'
+                      ? 'PDF URL'
+                      : 'Video URL (YouTube/Vimeo)',
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'URL is required';
+                  }
+
+                  final url = value.trim().toLowerCase();
+
+                  if (_type == 'pdf' && !url.endsWith('.pdf')) {
+                    return 'Only PDF files are allowed';
+                  }
+
+                  if (_type == 'video') {
+                    final isVideo =
+                        url.contains('youtube.com') ||
+                            url.contains('youtu.be') ||
+                            url.contains('vimeo.com');
+
+                    if (!isVideo) {
+                      return 'Enter a valid video link';
+                    }
+                  }
+
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 // Belt-and-braces: even though _type is normalized in
                 // initState, re-validate against the current items list
                 // right here so a bad value can never reach the widget.
-                value: _types.contains(_type) ? _type : 'notes',
+                value: _types.contains(_type) ? _type : 'pdf',
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: _types
                     .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                     .toList(),
-                onChanged: (v) => setState(() => _type = v ?? 'notes'),
+                onChanged: (v) => setState(() => _type = v ?? 'pdf'),
               ),
               const SizedBox(height: 12),
               TextFormField(
