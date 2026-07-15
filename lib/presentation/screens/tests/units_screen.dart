@@ -86,14 +86,14 @@ class _UnitsScreenState extends ConsumerState<UnitsScreen> {
         body: unitsAsync.when(
           loading: () => const LoadingView(),
           error: (e, _) => ErrorView(
-            message: e.toString(),
+            error: e,
             onRetry: _onRefresh,
           ),
           data: (units) {
             return attemptsAsync.when(
               loading: () => const LoadingView(),
               error: (e, _) => ErrorView(
-                message: 'Failed to load test history: $e',
+                error: e,
                 onRetry: _onRefresh,
               ),
               data: (attempts) {

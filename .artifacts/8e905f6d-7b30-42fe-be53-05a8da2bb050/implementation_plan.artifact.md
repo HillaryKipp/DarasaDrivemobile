@@ -1,40 +1,31 @@
-# Fix PDF Loading Blank Screen
+# Fix Corrupted PDF Error (Google Drive Link Conversion)
 
-The user reports that clicking on a PDF material results in a blank screen. This can be caused by missing platform configurations (Web scripts, Cleartext permissions) or lack of error handling/loading feedback in the PDF viewer screen.
-
-## User Review Required
-
-> [!IMPORTANT]
-> This plan includes adding `pdf.js` scripts to `web/index.html` and enabling cleartext traffic for Android and iOS. These are standard requirements for `syncfusion_flutter_pdfviewer` to work reliably across all network conditions and platforms.
+The user is getting a "document corrupted" error because the database contains Google Drive "view" links (e.g., `https://drive.google.com/file/d/.../view`). These links point to an HTML viewer page rather than the raw PDF file. The PDF viewer requires a direct link to the binary PDF data.
 
 ## Proposed Changes
 
-### [Component] Platform Configuration
+### [Component] Utilities
 
-#### [MODIFY] [web/index.html](file:///C:/Users/hillary.kipkorir/Desktop/darasadrive_mobile/web/index.html)
-- Add the necessary `pdf.js` scripts to the `<head>` section to support PDF rendering on Web.
-
-#### [MODIFY] [android/app/src/main/AndroidManifest.xml](file:///C:/Users/hillary.kipkorir/Desktop/darasadrive_mobile/android/app/src/main/AndroidManifest.xml)
-- Add `android:usesCleartextTraffic="true"` to the `<application>` tag to support `http://` URLs.
-
-#### [MODIFY] [ios/Runner/Info.plist](file:///C:/Users/hillary.kipkorir/Desktop/darasadrive_mobile/ios/Runner/Info.plist)
-- Add `NSAppTransportSecurity` with `NSAllowsArbitraryLoads` to support `http://` URLs.
+#### [NEW] [url_helpers.dart](file:///C:/Users/hillary.kipkorir/Desktop/darasadrive_mobile/lib/core/utils/url_helpers.dart)
+- Create a utility function `getDirectPdfUrl(String url)` that detects Google Drive links and converts them to direct download links.
+- Pattern to match: `https://drive.google.com/file/d/FILE_ID/view...` or `https://drive.google.com/open?id=FILE_ID`
+- Conversion target: `https://drive.google.com/uc?export=download&id=FILE_ID`
 
 ---
 
 ### [Component] UI / Presentation
 
 #### [MODIFY] [materials_screen.dart](file:///C:/Users/hillary.kipkorir/Desktop/darasadrive_mobile/lib/presentation/screens/materials/materials_screen.dart)
-- Update `_PdfViewerScreen` to handle loading and error states explicitly.
-- Add `onDocumentLoadFailed` callback to `SfPdfViewer.network` to capture and display errors.
-- Use `LoadingView` and `ErrorView` (existing widgets) to provide better user feedback.
+- Integrate the `getDirectPdfUrl` helper in `_PdfViewerScreen`.
+- Ensure that both the manual "Fetch as Bytes" (on Web) and the `SfPdfViewer.network` (on Mobile) use the converted direct link.
 
 ## Verification Plan
 
 ### Automated Tests
-- I will run `flutter analyze` to ensure no syntax errors were introduced.
+- I will run `flutter analyze` to ensure no syntax errors.
+- I will verify the regex logic handles the specific URL formats provided by the user.
 
 ### Manual Verification
-- Verify that PDF URLs (both HTTPS and HTTP) load correctly.
-- Verify that on Web, the PDF viewer renders correctly (requires `pdf.js` scripts).
-- Trigger a load failure (e.g., by using a broken URL) and verify that the `ErrorView` is shown instead of a blank screen.
+- Test with the specific URLs provided by the user:
+    - `https://drive.google.com/file/d/1W3po2ELjahhNFS7c12w3tvnx33c4xk_2/view?usp=drivesdk`
+- Confirm that the app no longer shows the "corrupted" error and successfully renders the PDF.

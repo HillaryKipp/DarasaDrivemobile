@@ -51,14 +51,14 @@ class StatisticsScreen extends ConsumerWidget {
       body: attemptsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
-          message: e.toString(),
+          error: e,
           onRetry: () => ref.invalidate(testAttemptsProvider),
         ),
         data: (attempts) {
           return unitsAsync.when(
             loading: () => const LoadingView(),
             error: (e, _) => ErrorView(
-              message: e.toString(),
+              error: e,
               onRetry: () => ref.invalidate(unitsProvider),
             ),
             data: (units) {

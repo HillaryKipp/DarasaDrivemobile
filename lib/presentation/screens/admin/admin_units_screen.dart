@@ -26,7 +26,7 @@ class AdminUnitsScreen extends ConsumerWidget {
       body: unitsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
-            message: e.toString(),
+            error: e,
             onRetry: () => ref.invalidate(unitsProvider)),
         data: (units) => ListView(
           children: [

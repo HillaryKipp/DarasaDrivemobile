@@ -1,28 +1,27 @@
-# PDF Loading Fix Walkthrough
+# Fix Corrupted PDF Error Walkthrough
 
-I have addressed the issue where PDF materials were loading as a blank screen. This was primarily due to missing platform configurations and silent failures when loading network resources.
+I have implemented a fix for the "document corrupted" error which was caused by Google Drive "view" links in the database.
 
 ## Changes Made
 
-### 1. Web Support
-Added the required `pdf.js` scripts to `web/index.html`. Syncfusion PDF viewer requires these scripts to render PDFs on the web platform.
+### 1. New URL Helper Utility
+Created `lib/core/utils/url_helpers.dart` which contains a logic to detect Google Drive links and convert them into direct download links.
+- **Before**: `https://drive.google.com/file/d/FILE_ID/view?usp=sharing` (HTML page)
+- **After**: `https://drive.google.com/uc?export=download&id=FILE_ID` (Raw PDF data)
 
-### 2. Network Security Permissions
-Enabled "Cleartext Traffic" (HTTP support) for both Android and iOS. This ensures that PDF URLs hosted on non-HTTPS servers can still be accessed and displayed by the app.
-- **Android**: Added `android:usesCleartextTraffic="true"` to `AndroidManifest.xml`.
-- **iOS**: Added `NSAllowsArbitraryLoads` to `Info.plist`.
-
-### 3. Enhanced PDF Viewer UI
-Updated `_PdfViewerScreen` in `materials_screen.dart` to provide better feedback to the user:
-- **Loading State**: Displays a `LoadingView` while the document is being fetched and rendered.
-- **Error Handling**: Implemented `onDocumentLoadFailed` to capture errors (like broken links or network issues) and display an `ErrorView` with a retry button instead of a blank screen.
+### 2. Integration in Materials Screen
+Updated `_PdfViewerScreen` in `lib/presentation/screens/materials/materials_screen.dart`:
+- **Auto-Conversion**: The app now automatically transforms any Google Drive link before attempting to load it.
+- **Compatibility**: This fix works for both the "Fetch as Bytes" logic (Web) and the standard network streaming logic (Mobile).
 
 ## Verification Results
 
 ### Automated Tests
-- Ran `flutter analyze`: Passed with no errors related to the changes.
+- Ran `flutter analyze`: Passed with no errors in the modified files.
 
 ### Manual Verification Recommended
-- Open a PDF document on a Web build to ensure `pdf.js` integration is working.
-- Test with both `http://` and `https://` PDF URLs to verify network permission changes.
-- Verify that the "Opening document..." loading screen appears briefly when clicking a material.
+- Open any of the materials that previously showed the "corrupted" error. They should now load successfully as PDFs.
+- Verify that standard (non-Drive) PDF links still work as expected.
+
+> [!IMPORTANT]
+> Google Drive direct links (`/uc?export=download`) have a limit on file size for "virus scanning" warnings. If your PDF is very large, Google might show a "file too large to scan" page instead of the PDF data. For most educational PDFs, this logic is the most reliable way to handle Drive links without requiring manual URL editing in the database.

@@ -37,7 +37,7 @@ class _AdminQuestionsScreenState extends ConsumerState<AdminQuestionsScreen> {
       body: unitsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
-            message: e.toString(),
+            error: e,
             onRetry: () => ref.invalidate(unitsProvider)),
         data: (units) {
           _selectedUnitId ??= units.isNotEmpty ? units.first.id : null;
@@ -112,7 +112,7 @@ class _QuestionsList extends ConsumerWidget {
     return questionsAsync.when(
       loading: () => const LoadingView(),
       error: (e, _) => ErrorView(
-          message: e.toString(),
+          error: e,
           onRetry: () => ref.invalidate(adminQuestionsProvider(unitId))),
       data: (questions) {
         if (questions.isEmpty) {

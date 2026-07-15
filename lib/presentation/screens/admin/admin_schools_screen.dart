@@ -26,7 +26,7 @@ class AdminSchoolsScreen extends ConsumerWidget {
       body: schoolsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
-            message: e.toString(),
+            error: e,
             onRetry: () => ref.invalidate(schoolsProvider)),
         data: (schools) => ListView(
           children: [

@@ -46,7 +46,7 @@ class _SchoolsScreenState extends ConsumerState<SchoolsScreen> {
       body: schoolsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
-          message: e.toString(),
+          error: e,
           onRetry: () => ref.invalidate(schoolsProvider),
         ),
         data: (schools) {

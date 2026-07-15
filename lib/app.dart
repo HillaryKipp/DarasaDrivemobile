@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/errors/error_handler.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/providers/auth_providers.dart';
 import 'presentation/router/app_router.dart';
@@ -11,19 +11,6 @@ import 'presentation/widgets/loading_view.dart';
 
 class DarasaDriveApp extends ConsumerWidget {
   const DarasaDriveApp({super.key});
-
-  String _mapErrorMessage(Object error) {
-    final msg = error.toString();
-    if (msg.contains('SocketException') || 
-        msg.contains('ClientException') || 
-        msg.contains('failed host lookup')) {
-      return 'No internet connection. Please check your network and try again.';
-    }
-    if (msg.contains('timeout')) {
-      return 'The connection timed out. Please try again.';
-    }
-    return 'Something went wrong. Please try again later.';
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -51,7 +38,7 @@ class DarasaDriveApp extends ConsumerWidget {
             FlutterNativeSplash.remove();
             return Scaffold(
               body: ErrorView(
-                message: _mapErrorMessage(err),
+                error: err,
                 onRetry: () => ref.invalidate(authStateProvider),
               ),
             );

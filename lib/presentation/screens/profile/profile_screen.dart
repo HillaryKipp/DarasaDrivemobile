@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/errors/error_handler.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/repository_providers.dart';
@@ -93,7 +94,7 @@ class ProfileScreen extends ConsumerWidget {
                     padding: EdgeInsets.all(20),
                     child: LoadingView(),
                   ),
-                  error: (e, _) => Text(e.toString()),
+                  error: (e, _) => Text(getErrorMessage(e)),
                   data: (profile) => Column(
                     children: [
                       _InfoTile(
@@ -243,7 +244,7 @@ class ProfileScreen extends ConsumerWidget {
           
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(e.toString()),
+              content: Text(getErrorMessage(e)),
               backgroundColor: Colors.redAccent,
               behavior: SnackBarBehavior.floating,
             ),

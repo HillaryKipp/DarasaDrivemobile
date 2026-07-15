@@ -22,7 +22,7 @@ class AdminUsersScreen extends ConsumerWidget {
       body: usersAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
-            message: e.toString(),
+            error: e,
             onRetry: () => ref.invalidate(adminUsersProvider)),
         data: (users) => ListView(
           children: [

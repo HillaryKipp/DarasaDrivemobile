@@ -20,7 +20,7 @@ class AdminPaymentsScreen extends ConsumerWidget {
       body: paymentsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
-            message: e.toString(),
+            error: e,
             onRetry: () => ref.invalidate(adminPaymentsProvider)),
         data: (payments) => ListView(
           children: [

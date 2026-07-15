@@ -26,7 +26,7 @@ class AdminMaterialsScreen extends ConsumerWidget {
       body: materialsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
-            message: e.toString(),
+            error: e,
             onRetry: () => ref.invalidate(materialsProvider)),
         data: (materials) => ListView(
           children: [

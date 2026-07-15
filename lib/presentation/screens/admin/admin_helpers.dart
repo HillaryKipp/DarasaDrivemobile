@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/errors/app_exception.dart';
+import '../../../core/errors/error_handler.dart';
 import '../../../core/theme/app_theme.dart';
 
 Future<bool> confirmDelete(BuildContext context, String label) async {
@@ -33,7 +33,7 @@ Future<bool> confirmDelete(BuildContext context, String label) async {
 }
 
 void showAdminError(BuildContext context, Object error) {
-  final message = error is AppException ? error.message : error.toString();
+  final message = getErrorMessage(error);
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(message),

@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/errors/app_exception.dart';
+import '../../core/errors/error_handler.dart';
 import '../../domain/entities/admin_user.dart';
 import '../../domain/entities/material_item.dart';
 import '../../domain/entities/payment_record.dart';
@@ -21,6 +22,11 @@ class AdminRepositoryImpl implements AdminRepository {
       return await action();
     } on PostgrestException catch (e) {
       throw AppException(e.message);
+    } catch (e) {
+      // Re-throw so getErrorMessage can handle it, 
+      // or wrap in AppException if we want to force a friendly message here
+      if (e is AppException) rethrow;
+      throw AppException(getErrorMessage(e));
     }
   }
 

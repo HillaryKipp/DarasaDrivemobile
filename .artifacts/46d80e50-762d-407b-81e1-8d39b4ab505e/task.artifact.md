@@ -1,6 +1,6 @@
-- [ ] Create `error_handler.dart` to centralize error message translation
-- [ ] Update `ErrorView` to use `getErrorMessage`
-- [ ] Update `admin_helpers.dart` (`showAdminError`) to use `getErrorMessage`
-- [ ] Refactor `AdminRepositoryImpl` to use improved error wrapping
-- [ ] Scan and update other screens showing raw error strings
+- [x] Create `error_handler.dart` to centralize error message translation
+- [x] Update `ErrorView` to use `getErrorMessage`
+- [x] Update `admin_helpers.dart` (`showAdminError`) to use `getErrorMessage`
+- [x] Refactor `AdminRepositoryImpl` to use improved error wrapping
+- [x] Scan and update other screens showing raw error strings
 - [ ] Verify changes by simulating network failure

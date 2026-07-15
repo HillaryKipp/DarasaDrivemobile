@@ -1,8 +1,11 @@
-- [ ] Platform Configuration
-    - [ ] Update `web/index.html` with `pdf.js` scripts
-    - [ ] Update `android/app/src/main/AndroidManifest.xml` for cleartext traffic
-    - [ ] Update `ios/Runner/Info.plist` for cleartext traffic
-- [ ] UI / Presentation Improvements
-    - [ ] Update `_PdfViewerScreen` in `materials_screen.dart` with loading and error handling
-- [ ] Verification
-    - [ ] Run `flutter analyze`
+- [x] Platform Configuration
+    - [x] Update `web/index.html` with `pdf.js` scripts
+    - [x] Update `android/app/src/main/AndroidManifest.xml` for cleartext traffic
+    - [x] Update `ios/Runner/Info.plist` for cleartext traffic
+    - [x] Upgrade `web/index.html` to `pdf.js` v4.x
+- [x] UI / Presentation Improvements
+    - [x] Update `_PdfViewerScreen` in `materials_screen.dart` with loading and error handling
+    - [x] Implement "Fetch as Bytes" for Web in `materials_screen.dart`
+    - [x] Fix Google Drive links using `UrlHelpers`
+- [x] Verification
+    - [x] Run `flutter analyze`

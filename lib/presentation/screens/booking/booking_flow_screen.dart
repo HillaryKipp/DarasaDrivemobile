@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/errors/error_handler.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/entities/school.dart';
 import '../../providers/auth_providers.dart';
@@ -55,7 +56,7 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
       loading: () => const Scaffold(body: LoadingView()),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
-        body: ErrorView(message: e.toString()),
+        body: ErrorView(error: e),
       ),
       data: (school) {
         final category = school.vehicleCategories.contains(_category)
@@ -251,7 +252,7 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text(getErrorMessage(e)), backgroundColor: Colors.redAccent),
         );
       }
     } finally {

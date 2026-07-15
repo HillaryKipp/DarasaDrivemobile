@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
+import '../../core/errors/error_handler.dart';
 
 class ErrorView extends StatelessWidget {
-  const ErrorView({super.key, required this.message, this.onRetry});
+  const ErrorView({
+    super.key,
+    this.message,
+    this.error,
+    this.onRetry,
+  });
 
-  final String message;
+  final String? message;
+  final Object? error;
   final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
+    final displayMessage = message ?? getErrorMessage(error);
+    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -16,7 +25,7 @@ class ErrorView extends StatelessWidget {
           children: [
             const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
             const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
+            Text(displayMessage, textAlign: TextAlign.center),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
               OutlinedButton(onPressed: onRetry, child: const Text('Retry')),

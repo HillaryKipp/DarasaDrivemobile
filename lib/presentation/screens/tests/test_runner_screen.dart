@@ -41,7 +41,7 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
       loading: () => const Scaffold(body: LoadingView(message: 'Loading unit…')),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
-        body: ErrorView(message: e.toString()),
+        body: ErrorView(error: e),
       ),
       data: (unit) {
         if (!unit.isAccessible(hasPaid)) {
@@ -84,7 +84,7 @@ class _TestRunnerScreenState extends ConsumerState<TestRunnerScreen> {
           error: (e, _) => Scaffold(
             appBar: AppBar(title: Text(unit.title)),
             body: ErrorView(
-              message: e.toString(),
+              error: e,
               onRetry: () => ref.invalidate(questionsProvider(widget.unitId)),
             ),
           ),

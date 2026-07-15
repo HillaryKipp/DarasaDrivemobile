@@ -1,10 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
-import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/url_helpers.dart';
 import '../../../domain/entities/material_item.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/data_providers.dart';
@@ -114,7 +116,10 @@ class MaterialsScreen extends ConsumerWidget {
             Expanded(
               child: materialsAsync.when(
                 loading: () => const LoadingView(),
-                error: (e, _) => ErrorView(message: e.toString(), onRetry: () {}),
+                error: (e, _) => ErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(materialsProvider),
+                ),
                 data: (materials) => TabBarView(
                   children: [
                     _MaterialsList(
@@ -293,6 +298,45 @@ class _PdfViewerScreenState extends State<_PdfViewerScreen> {
   final PdfViewerController _pdfController = PdfViewerController();
   int _currentPage = 1;
   int _totalPages = 0;
+  bool _isLoading = true;
+  String? _error;
+  Uint8List? _pdfBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    final directUrl = UrlHelpers.getDirectPdfUrl(widget.url);
+    if (kIsWeb) {
+      _fetchPdfBytes(directUrl);
+    }
+  }
+
+  Future<void> _fetchPdfBytes(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        if (mounted) {
+          setState(() {
+            _pdfBytes = response.bodyBytes;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _error = 'Failed to download PDF (Status: ${response.statusCode}). This might be a CORS issue.';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Error downloading PDF: $e\n\nNote: If you are running locally, try disabling web security or configuring CORS on your storage provider.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -302,6 +346,8 @@ class _PdfViewerScreenState extends State<_PdfViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final directUrl = UrlHelpers.getDirectPdfUrl(widget.url);
+    
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF9),
       appBar: AppBar(
@@ -324,7 +370,7 @@ class _PdfViewerScreenState extends State<_PdfViewerScreen> {
         ),
         centerTitle: true,
         actions: [
-          if (_totalPages > 0)
+          if (_totalPages > 0 && _error == null)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Center(
@@ -340,15 +386,65 @@ class _PdfViewerScreenState extends State<_PdfViewerScreen> {
             ),
         ],
       ),
-      body: SfPdfViewer.network(
-        widget.url,
-        controller: _pdfController,
-        onDocumentLoaded: (details) {
-          setState(() => _totalPages = details.document.pages.count);
-        },
-        onPageChanged: (details) {
-          setState(() => _currentPage = details.newPageNumber);
-        },
+      body: Stack(
+        children: [
+          if (_error != null)
+            ErrorView(
+              message: _error,
+              onRetry: () {
+                setState(() {
+                  _error = null;
+                  _isLoading = true;
+                  _pdfBytes = null;
+                });
+                if (kIsWeb) {
+                  _fetchPdfBytes(directUrl);
+                }
+              },
+            )
+          else if (kIsWeb && _pdfBytes != null)
+            SfPdfViewer.memory(
+              _pdfBytes!,
+              controller: _pdfController,
+              onDocumentLoaded: (details) {
+                setState(() {
+                  _totalPages = details.document.pages.count;
+                  _isLoading = false;
+                });
+              },
+              onDocumentLoadFailed: (details) {
+                setState(() {
+                  _error = 'Failed to render PDF: ${details.description}';
+                  _isLoading = false;
+                });
+              },
+              onPageChanged: (details) {
+                setState(() => _currentPage = details.newPageNumber);
+              },
+            )
+          else if (!kIsWeb)
+            SfPdfViewer.network(
+              directUrl,
+              controller: _pdfController,
+              onDocumentLoaded: (details) {
+                setState(() {
+                  _totalPages = details.document.pages.count;
+                  _isLoading = false;
+                });
+              },
+              onDocumentLoadFailed: (details) {
+                setState(() {
+                  _error = 'Failed to load document: ${details.description}';
+                  _isLoading = false;
+                });
+              },
+              onPageChanged: (details) {
+                setState(() => _currentPage = details.newPageNumber);
+              },
+            ),
+          if (_isLoading && _error == null)
+            const LoadingView(message: 'Opening document...'),
+        ],
       ),
     );
   }
