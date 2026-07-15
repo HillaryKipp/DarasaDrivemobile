@@ -1,0 +1,8 @@
+- [ ] Platform Configuration
+    - [ ] Update `web/index.html` with `pdf.js` scripts
+    - [ ] Update `android/app/src/main/AndroidManifest.xml` for cleartext traffic
+    - [ ] Update `ios/Runner/Info.plist` for cleartext traffic
+- [ ] UI / Presentation Improvements
+    - [ ] Update `_PdfViewerScreen` in `materials_screen.dart` with loading and error handling
+- [ ] Verification
+    - [ ] Run `flutter analyze`
